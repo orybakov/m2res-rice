@@ -31,10 +31,28 @@
 | `m2res-shot` area/edit/screen/window | скриншоты, редактор satty | `Print`, `Shift+Print`, `Ctrl+Print` |
 | `m2res-dictate` | голосовая диктовка (Whisper) | `SUPER+SHIFT+D` |
 | `m2res-wallpick` | револьвер выбора обоев | `SUPER+W` |
+| `m2res-rice` | переключатель райсов (см. раздел «Райсы») | `SUPER+ALT+R` |
 | `m2res-launcher`, `-clip`, `-power`, `-overview`, `-switch` | лаунчер, буфер, меню выключения, обзор столов, Alt+Tab | `SUPER+D`, `SUPER+V`, `SUPER+Esc`, `SUPER+Tab`, `Alt+Tab` |
 | `m2res-center`, `-player`, `-cheat`, `-drop` | центр уведомлений, плеер, шпаргалка биндов, выпадающий терминал | `SUPER+N`, `SUPER+P`, `SUPER+F1`, `` SUPER+` `` |
 | `lock/hyprlock.conf` | экран блокировки с HUD | `SUPER+L` |
 Полный список: `m2res-binds list`, проверка дублей: `m2res-binds dups`. Браузер по умолчанию — Chrome (`SUPER+B`).
+
+## Райсы — переключатель оформления (`m2res-rice`)
+Райс — это папка `rices/<имя>/` с `rice.json` (+ `bar.css`, `wall.jpg`, `preview.jpg`). Один райс меняет **всё сразу**: палитру и акцент, обои, Waybar (раскладка, высота, остров/полоса, сверху/снизу, CSS), геометрию Hyprland (отступы, рамка, скругление, размытие, тень, анимации), форму и вид самих виджетов (лаунчер, центр управления, плеер, док, OSD, шпаргалка: рамка, форма, шрифт, цвета), mako, экран блокировки, Ghostty, док и звуки уведомлений.
+
+Готовые райсы: **m2res** (оригинал), **paper** (светлая бумага), **zen** (только текст), **brutal** (необрутализм), **cyber** (неон, скошенные углы), **glass** (матовое стекло), **tty** (зелёный фосфор, без анимаций) и 6 райсов `theme-*`, собранных из тем `~/.local/share/dotfiles/themes` (`m2res-rice import-themes`).
+
+| Команда | Что делает |
+|---|---|
+| `m2res-rice pick` (`SUPER+ALT+R`) | карусель карточек с превью; ← → выбрать, **Enter** — примерить на 10 с, потом «оставить?» (Enter — оставить, Esc — вернуть; без ответа вернётся само), **A** — применить сразу |
+| `m2res-rice next` (`SUPER+ALT+SHIFT+R`), `prev`, `back` | следующий / предыдущий / вернуться к прежнему |
+| `m2res-rice list`, `status`, `apply NAME [--keep-accent] [--no-wall]` | список, что применено, применить |
+| `m2res-rice preview NAME [сек]`, `keep`, `revert` | применить на время и само вернуть |
+| `m2res-rice shoot [NAME\|all]` | снять `preview.jpg` (на пустом столе 9, имя машины в кадр не попадает) |
+| `m2res-rice new NAME [--from X]`, `validate`, `regen` | свой райс из копии, проверка, пересборка после правки `rice.json` |
+| `m2res-rice pack NAME`, `install ПУТЬ\|URL` | поделиться райсом (`.m2rice`) / поставить чужой |
+
+Бейдж текущего райса стоит в Waybar (клик — карточки, ПКМ — следующий). Waybar собирается из `waybar/config.base` + `waybar/style.base.css` + райса — правьте `*.base` и `rices/*`, а не `waybar/config`/`style.css`. Райс — это ось «ВИД», профили (`m2res-profile`) — ось «РЕЖИМ»: они независимы. В игровом режиме геометрия и анимации райса применяются после выхода из него. Сломали — `m2res-rice apply m2res` или `m2res-rice back`. `m2res-doctor` проверяет райсы, `m2res-backup`/снимки включают `rices/` и `rice.current`; установщик ставит все райсы и включает `m2res` (Ghostty подключается через `config-file`).
 
 ## Профили (`profiles.conf`)
 Профиль = акцент, обои (необязательно), «не беспокоить», профиль питания, раскладка текущего стола, ночной свет, игровой режим.

@@ -7,6 +7,8 @@
 Запуск: m2res-wallpick toggle   (или: wallpick.py --warm — только прогреть кэш превью)"""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from style import ST  # noqa: E402
 import cairo  # noqa: E402
 import gi, json, math, random, re, shutil, subprocess, threading, time  # noqa: E402
 from PIL import Image, ImageFilter, ImageOps  # noqa: E402
@@ -16,7 +18,7 @@ M2 = HOME + "/.config/m2res"
 WALL_DIRS = [os.path.expanduser(d) for d in os.environ.get("M2_WALL_DIR", HOME + "/Pictures/anime-wallpapers:" + HOME + "/Pictures/dotfiles-wallpapers").split(":") if d]
 CACHE = HOME + "/.cache/m2res/wallpick"
 STATE = M2 + "/wallpick-state.json"
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 MODES = ["fade", "wipe", "grow", "outer", "clock", "random"]
 FITS = ["auto", "fill", "fit"]     # fill — на весь экран с обрезкой; fit — целиком + размытые края; auto — fit для узких, fill для ультрашироких
 AUTO_FIT_BELOW = 2.0               # соотношение сторон картинки, ниже которого auto вписывает целиком
@@ -196,7 +198,7 @@ def setup_layer(win, layer, ns, kb, mon):
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
-def draw_text(cr, s, x, y, size, color=(1, 1, 1), bold=True, align="c"):
+def draw_text(cr, s, x, y, size, color=ST.n(1, 1, 1), bold=True, align="c"):
     lay = PangoCairo.create_layout(cr)
     fd = Pango.FontDescription(f"{FONT} {'Bold' if bold else ''}"); fd.set_absolute_size(size * Pango.SCALE)
     lay.set_font_description(fd); lay.set_text(s, -1)
@@ -461,22 +463,22 @@ class Picker(Gtk.ApplicationWindow):
                 cr.new_sub_path(); cr.arc(cx + ORB * math.cos(ang), cy + ORB * math.sin(ang), rr, 0, 2 * math.pi)
         for lw, al in ((46, 0.06), (32, 0.08), (20, 0.1)):
             body(); cr.set_source_rgba(0, 0, 0, al); cr.set_line_width(lw); cr.stroke()
-        body(); cr.set_source_rgb(0.2, 0.2, 0.21); cr.set_line_width(9); cr.stroke_preserve()
-        cr.set_source_rgb(0.085, 0.085, 0.09); cr.fill()
+        body(); cr.set_source_rgb(*ST.n(0.2, 0.2, 0.21)); cr.set_line_width(9); cr.stroke_preserve()
+        cr.set_source_rgb(*ST.n(0.085, 0.085, 0.09)); cr.fill()
         # центр
-        cr.arc(cx, cy, CENTER_R + 6, 0, 2 * math.pi); cr.set_source_rgb(0.2, 0.2, 0.21); cr.fill()
-        cr.arc(cx, cy, CENTER_R, 0, 2 * math.pi); cr.set_source_rgb(0.045, 0.045, 0.04); cr.fill()
+        cr.arc(cx, cy, CENTER_R + 6, 0, 2 * math.pi); cr.set_source_rgb(*ST.n(0.2, 0.2, 0.21)); cr.fill()
+        cr.arc(cx, cy, CENTER_R, 0, 2 * math.pi); cr.set_source_rgb(*ST.n(0.045, 0.045, 0.04)); cr.fill()
         cr.arc(cx, cy, CENTER_R - 7, 0, 2 * math.pi); cr.set_source_rgba(*ACC, 0.85); cr.set_line_width(2); cr.stroke()
         N = len(self.items)
         if not N:
-            draw_text(cr, "НЕТ ОБОЕВ", cx, cy, 16, (0.8, 0.8, 0.8)); return
+            draw_text(cr, "НЕТ ОБОЕВ", cx, cy, 16, ST.n(0.8, 0.8, 0.8)); return
         it = self.items[self.idx()]
         draw_text(cr, f"{self.idx() + 1:02d} / {N:02d}", cx, cy - 62, 12, ACC)
-        draw_block(cr, re.sub(r"[-_]+", " ", it["stem"]).upper(), cx, cy - 10, CENTER_R * 1.55, 24, (1, 1, 1))
-        draw_text(cr, f"{it['size'][0]}×{it['size'][1]} · {it['ext']}", cx, cy + 42, 11, (0.6, 0.6, 0.62), False)
+        draw_block(cr, re.sub(r"[-_]+", " ", it["stem"]).upper(), cx, cy - 10, CENTER_R * 1.55, 24, ST.n(1, 1, 1))
+        draw_text(cr, f"{it['size'][0]}×{it['size'][1]} · {it['ext']}", cx, cy + 42, 11, ST.n(0.6, 0.6, 0.62), False)
         how = eff_fit(self.fit, it["size"])
         draw_text(cr, ("MONO" if self.mono else "COLOR") + " · " + (how.upper() if self.fit != "auto" else "AUTO:" + how.upper()),
-                  cx, cy + 68, 11, ACC if self.mono else (0.9, 0.9, 0.9), True)
+                  cx, cy + 68, 11, ACC if self.mono else ST.n(0.9, 0.9, 0.9), True)
         # слоты
         vis = []
         for i in range(N):
@@ -494,24 +496,24 @@ class Picker(Gtk.ApplicationWindow):
             sel = max(0.0, 1 - abs(rel)); r = R_N + (R_S - R_N) * sel
             self.slots.append((sx, sy, r, rel))
             if al < 0.99: cr.push_group()
-            cr.arc(sx, sy, r + 5, 0, 2 * math.pi); cr.set_source_rgb(0.03, 0.03, 0.035); cr.fill()
+            cr.arc(sx, sy, r + 5, 0, 2 * math.pi); cr.set_source_rgb(*ST.n(0.03, 0.03, 0.035)); cr.fill()
             th = self.surface(i)
             cr.save(); cr.arc(sx, sy, r, 0, 2 * math.pi); cr.clip()
             if th is not None:
                 cr.translate(sx - r, sy - r); k = 2 * r / th.get_width(); cr.scale(k, k)
                 cr.set_source_surface(th, 0, 0); cr.get_source().set_filter(cairo.FILTER_GOOD); cr.paint()
             else:
-                cr.set_source_rgb(0.12, 0.12, 0.13); cr.paint()
+                cr.set_source_rgb(*ST.n(0.12, 0.12, 0.13)); cr.paint()
             cr.restore()
             if sel > 0.02:
                 cr.arc(sx, sy, r + 3, 0, 2 * math.pi); cr.set_source_rgba(1, 1, 1, sel); cr.set_line_width(5); cr.stroke()
                 cr.arc(sx, sy, r - 4, 0, 2 * math.pi); cr.set_source_rgba(*ACC, sel * 0.9); cr.set_line_width(2); cr.stroke()
             else:
-                cr.arc(sx, sy, r + 2, 0, 2 * math.pi); cr.set_source_rgb(0.1, 0.1, 0.11); cr.set_line_width(4); cr.stroke()
+                cr.arc(sx, sy, r + 2, 0, 2 * math.pi); cr.set_source_rgb(*ST.n(0.1, 0.1, 0.11)); cr.set_line_width(4); cr.stroke()
             if sel < 0.5:
                 for ox, oy in ((-1.5, 0), (1.5, 0), (0, -1.5), (0, 1.5)):
                     draw_text(cr, str(i + 1), sx + ox, sy + r * 0.55 + oy, 20, (0, 0, 0))
-                draw_text(cr, str(i + 1), sx, sy + r * 0.55, 20, (1, 1, 1))
+                draw_text(cr, str(i + 1), sx, sy + r * 0.55, 20, ST.n(1, 1, 1))
             if al < 0.99:
                 cr.pop_group_to_source(); cr.paint_with_alpha(al)
 
@@ -519,18 +521,18 @@ class Picker(Gtk.ApplicationWindow):
         total = len(MODES) * CH_W + (len(MODES) - 1) * CH_GAP; x0 = cx - total / 2
         for sx in (-1, 1):
             cr.move_to(cx + sx * 90, y - 30); cr.line_to(cx + sx * (total / 2 - 20), y - 30)
-            cr.set_source_rgba(1, 1, 1, 0.12); cr.set_line_width(1); cr.stroke()
-        draw_text(cr, "TRANSITION MODE", cx, y - 30, 10, (0.65, 0.65, 0.68), True)
+            cr.set_source_rgba(*ST.n(1, 1, 1, 0.12)); cr.set_line_width(1); cr.stroke()
+        draw_text(cr, "TRANSITION MODE", cx, y - 30, 10, ST.n(0.65, 0.65, 0.68), True)
         self.chips = []
         for i, m in enumerate(MODES):
             x = x0 + i * (CH_W + CH_GAP); sel = m == self.mode; yy = y - 4 if sel else y
             self.poly(cr, x, yy + 3, CH_W, CH_H, 11); cr.set_source_rgba(0, 0, 0, 0.6); cr.fill()
             self.poly(cr, x, yy, CH_W, CH_H, 11)
             if sel: cr.set_source_rgb(*ACC)
-            else: cr.set_source_rgb(0.15, 0.15, 0.16) if i == self.hover else cr.set_source_rgb(0.085, 0.085, 0.09)
-            cr.fill_preserve(); cr.set_source_rgb(0.22, 0.22, 0.23) if not sel else cr.set_source_rgb(1, 1, 1)
+            else: cr.set_source_rgb(*ST.n(0.15, 0.15, 0.16)) if i == self.hover else cr.set_source_rgb(*ST.n(0.085, 0.085, 0.09))
+            cr.fill_preserve(); cr.set_source_rgb(*ST.n(0.22, 0.22, 0.23)) if not sel else cr.set_source_rgb(*ST.n(1, 1, 1))
             cr.set_line_width(2); cr.stroke()
-            draw_text(cr, m.upper(), x + CH_W / 2, yy + CH_H / 2, 16, (0.07, 0.08, 0.02) if sel else (1, 1, 1), True)
+            draw_text(cr, m.upper(), x + CH_W / 2, yy + CH_H / 2, 16, ST.n(0.07, 0.08, 0.02) if sel else ST.n(1, 1, 1), True)
             self.chips.append((x, y - 4, CH_W, CH_H + 4, m))
 
 
@@ -566,7 +568,7 @@ class Trans(Gtk.ApplicationWindow):
         (ns, _nb), (os_, _ob) = self.new[0], (self.old if self.old else (None, None))
         W, H = ns.get_width(), ns.get_height(); cr.scale(w / W, h / H); w, h = W, H
         if os_ is not None: cr.set_source_surface(os_, 0, 0)
-        else: cr.set_source_rgb(0.03, 0.03, 0.03)
+        else: cr.set_source_rgb(*ST.n(0.03, 0.03, 0.03))
         cr.paint()
         cx, cy = w / 2, h / 2; R = math.hypot(w, h) / 2 + 4
         cr.save()

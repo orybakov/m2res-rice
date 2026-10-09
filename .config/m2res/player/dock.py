@@ -11,8 +11,10 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
 M2 = os.path.dirname(HERE)
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 W, PAD, BH, BG = 84, 12, 46, 6          # ширина панели, поля, высота кнопки, зазор
 MARGIN = 8
 
@@ -236,23 +238,22 @@ class Dock(Gtk.ApplicationWindow):
         cr.set_source_rgba(*color, alpha); cr.move_to(ox, y - h / 2); PangoCairo.show_layout(cr, lay); return w
 
     def rr(self, cr, x, y, w, h, r):
-        cr.new_sub_path(); cr.arc(x + w - r, y + r, r, -1.5708, 0); cr.arc(x + w - r, y + h - r, r, 0, 1.5708)
-        cr.arc(x + r, y + h - r, r, 1.5708, 3.1416); cr.arc(x + r, y + r, r, 3.1416, 4.7124); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def draw(self, _a, cr, w, h):
-        A = self.acc; TXT = (0.93, 0.93, 0.9); DIM = (0.54, 0.55, 0.5)
-        self.rr(cr, 0.5, 0.5, w - 1, h - 1, 18); cr.set_source_rgba(0.039, 0.039, 0.039, 0.94); cr.fill_preserve()
+        A = self.acc; TXT = ST.n(0.93, 0.93, 0.9); DIM = ST.n(0.54, 0.55, 0.5)
+        self.rr(cr, 0.5, 0.5, w - 1, h - 1, 18); cr.set_source_rgba(*ST.bg[:3], 0.94); cr.fill_preserve()
         cr.set_source_rgba(*A, 0.35); cr.set_line_width(1); cr.stroke()
         for i, (ic, nm, _c) in enumerate(BUTTONS):
             bx, by, bw, bh = self.btn_rect(i); hv = self.hover == ("b", i)
             if nm == "PROF" and self.stats.prof: ic_col = A
-            else: ic_col = (0.04, 0.04, 0.04) if hv else TXT
+            else: ic_col = ST.on_acc if hv else TXT
             self.rr(cr, bx, by, bw, bh, 10)
             if hv: cr.set_source_rgba(*A, 1.0)
-            else: cr.set_source_rgba(1, 1, 1, 0.05)
+            else: cr.set_source_rgba(*ST.n(1, 1, 1, 0.05))
             cr.fill()
-            self.text(cr, ic, 15, ic_col if not hv else (0.04, 0.04, 0.04), bx + bw / 2, by + 17, anchor="c")
-            self.text(cr, nm if not (nm == "PROF" and self.stats.prof) else self.stats.prof[:5].upper(), 8, (0.04, 0.04, 0.04) if hv else DIM, bx + bw / 2, by + 36, anchor="c", bold=True)
+            self.text(cr, ic, 15, ic_col if not hv else ST.on_acc, bx + bw / 2, by + 17, anchor="c")
+            self.text(cr, nm if not (nm == "PROF" and self.stats.prof) else self.stats.prof[:5].upper(), 8, ST.on_acc if hv else DIM, bx + bw / 2, by + 36, anchor="c", bold=True)
         py = self.player_y()
         cr.set_source_rgba(*A, 0.25); cr.rectangle(PAD, py - 8, W - 2 * PAD, 1); cr.fill()
         st = self.stats
@@ -261,14 +262,14 @@ class Dock(Gtk.ApplicationWindow):
         for k, g in enumerate(("\uf048", "\uf04c" if st.playing else "\uf04b", "\uf051")):
             bx, by, bw, bh = self.ctl_rect(k); hv = self.hover == ("p", k)
             if hv: self.rr(cr, bx + 2, by, bw - 4, bh, 8); cr.set_source_rgba(*A, 1.0); cr.fill()
-            self.text(cr, g, 12, (0.04, 0.04, 0.04) if hv else TXT, bx + bw / 2, by + bh / 2, anchor="c")
+            self.text(cr, g, 12, ST.on_acc if hv else TXT, bx + bw / 2, by + bh / 2, anchor="c")
         ly = py + 78 + 6
         cr.set_source_rgba(*A, 0.25); cr.rectangle(PAD, ly - 8, W - 2 * PAD, 1); cr.fill()
         for k, (nm, v) in enumerate((("CPU", st.cpu), ("GPU", st.gpu), ("VRAM", st.vram), ("RAM", st.ram))):
             y = ly + 4 + k * 34; col = (1.0, 0.36, 0.48) if v > 0.9 else A
             self.text(cr, nm, 8, DIM, PAD, y + 6, bold=True); self.text(cr, "%d%%" % round(v * 100), 8, TXT, W - PAD, y + 6, anchor="r", bold=True)
             bw = W - 2 * PAD
-            self.rr(cr, PAD, y + 16, bw, 6, 3); cr.set_source_rgba(1, 1, 1, 0.08); cr.fill()
+            self.rr(cr, PAD, y + 16, bw, 6, 3); cr.set_source_rgba(*ST.n(1, 1, 1, 0.08)); cr.fill()
             if v > 0.01: self.rr(cr, PAD, y + 16, max(6, bw * v), 6, 3); cr.set_source_rgba(*col, 1.0); cr.fill()
 
 

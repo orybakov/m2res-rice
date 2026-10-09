@@ -1,0 +1,80 @@
+{
+ "extends": "m2res",
+ "order": 60,
+ "title": "Everforest",
+ "icon": "󰏘",
+ "desc": "палитра темы everforest на скелете m2res",
+ "palette": {
+  "accent": "#dbbc7f",
+  "pill_bg": "rgba(45, 53, 59, 0.92)",
+  "pill_hover": "rgba(65, 70, 72, 0.96)",
+  "pill_fg": "#d3c6aa",
+  "pill_dim": "#918c7e",
+  "pill_ink": "#101010"
+ },
+ "widgets": {
+  "bg": [
+   0.176,
+   0.208,
+   0.231,
+   0.97
+  ],
+  "fg": [
+   0.827,
+   0.776,
+   0.667
+  ],
+  "dim": [
+   0.569,
+   0.549,
+   0.494
+  ],
+  "ink": [
+   1,
+   1,
+   1
+  ],
+  "on_acc": [
+   0.063,
+   0.063,
+   0.063
+  ],
+  "tint": true,
+  "frame": "glow"
+ },
+ "mako": {
+  "background-color": "#2d353bee",
+  "text-color": "#d3c6aa",
+  "body": "#918c7e",
+  "low": "#918c7e"
+ },
+ "lock": {
+  "bg": "2d353b",
+  "panel": "2d353bd9",
+  "inner": "2d353bf2",
+  "text": "#d3c6aa"
+ },
+ "ghostty": {
+  "background": "#2d353b",
+  "foreground": "#d3c6aa",
+  "palette": [
+   "#7a8478",
+   "#e67e80",
+   "#a7c080",
+   "#dbbc7f",
+   "#7fbbb3",
+   "#d699b6",
+   "#83c092",
+   "#f2efdf",
+   "#a6b0a0",
+   "#f85552",
+   "#8da101",
+   "#dfa000",
+   "#3a94c5",
+   "#df69ba",
+   "#35a77c",
+   "#fffbef"
+  ]
+ },
+ "wall": "wall.jpg"
+}

@@ -1,0 +1,42 @@
+{
+ "frame": "glow",
+ "shape": "round",
+ "rk": 1.0,
+ "border_w": 2.5,
+ "border_a": 0.55,
+ "glow_k": 1.0,
+ "shadow": [
+  0,
+  0
+ ],
+ "bg": [
+  0.039,
+  0.039,
+  0.039,
+  0.97
+ ],
+ "fg": [
+  0.92,
+  0.92,
+  0.88
+ ],
+ "dim": [
+  0.55,
+  0.56,
+  0.52
+ ],
+ "ink": [
+  1,
+  1,
+  1
+ ],
+ "on_acc": [
+  0.04,
+  0.04,
+  0.04
+ ],
+ "font": "CaskaydiaMono Nerd Font Mono",
+ "tint": false,
+ "name": "m2res",
+ "border": "gradient"
+}

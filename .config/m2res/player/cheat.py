@@ -10,13 +10,15 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONT = "CaskaydiaMono Nerd Font Mono"
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
+FONT = ST.font
 PW, PAD, MARG = 1360, 28, 40
 COLW, KEYW, ROW, ROWS = 630, 232, 30, 16
 HDR, SRCH = 78, 52
 PH = HDR + SRCH + ROWS * ROW + 58
 T_OPEN, T_CLOSE = 0.28, 0.14
-DIM, TXT, RED = (0.55, 0.56, 0.52), (0.92, 0.92, 0.88), (1.0, 0.36, 0.48)
+DIM, TXT, RED = ST.n(0.55, 0.56, 0.52), ST.n(0.92, 0.92, 0.88), (1.0, 0.36, 0.48)
 PRETTY = {"SUPER": "Super", "CTRL": "Ctrl", "ALT": "Alt", "SHIFT": "Shift", "return": "Enter", "Escape": "Esc", "Print": "PrtSc", "Tab": "Tab",
           "left": "←", "right": "→", "up": "↑", "down": "↓"}
 
@@ -106,9 +108,7 @@ class Cheat(Gtk.ApplicationWindow):
 
     # ---- рисование ----
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", width=None, alpha=1.0):
         lay = PangoCairo.create_layout(cr)
@@ -135,10 +135,7 @@ class Cheat(Gtk.ApplicationWindow):
 
     def panel(self, cr, now):
         A = self.acc; x0 = y0 = MARG
-        for i, a in ((18, 0.04), (12, 0.06), (6, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, x0 - i, y0 - i, PW + 2 * i, PH + 2 * i, 30 + i); cr.fill()
-        self.rr(cr, x0, y0, PW, PH, 30); cr.set_source_rgba(0.039, 0.039, 0.039, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.55); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, x0, y0, PW, PH, A, 30)
         dups = sum(1 for i in self.items if i.get("dup"))
         self.text(cr, "BINDS", 30, A, x0 + PAD, y0 + 42, bold=True)
         info = f"{len(self.items)} биндов" + (f" · дублей: {dups}" if dups else " · дублей нет")
@@ -146,7 +143,7 @@ class Cheat(Gtk.ApplicationWindow):
         cr.set_source_rgba(*A, 0.35); cr.set_line_width(1.5); cr.move_to(x0 + PAD, y0 + HDR - 6); cr.line_to(x0 + PW - PAD, y0 + HDR - 6); cr.stroke()
         # поиск
         sy = y0 + HDR + 2
-        self.rr(cr, x0 + PAD, sy, PW - 2 * PAD, 40, 14); cr.set_source_rgba(1, 1, 1, 0.04); cr.fill_preserve()
+        self.rr(cr, x0 + PAD, sy, PW - 2 * PAD, 40, 14); cr.set_source_rgba(*ST.n(1, 1, 1, 0.04)); cr.fill_preserve()
         cr.set_source_rgba(*A, 0.35); cr.set_line_width(1.5); cr.stroke()
         if self.query:
             wq = self.text(cr, self.query, 17, TXT, x0 + PAD + 16, sy + 21)

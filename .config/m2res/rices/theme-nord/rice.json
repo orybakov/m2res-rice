@@ -1,0 +1,80 @@
+{
+ "extends": "m2res",
+ "order": 60,
+ "title": "Nord",
+ "icon": "󰏘",
+ "desc": "палитра темы nord на скелете m2res",
+ "palette": {
+  "accent": "#88c0d0",
+  "pill_bg": "rgba(46, 52, 64, 0.92)",
+  "pill_hover": "rgba(66, 72, 84, 0.96)",
+  "pill_fg": "#d8dee9",
+  "pill_dim": "#949aa5",
+  "pill_ink": "#101010"
+ },
+ "widgets": {
+  "bg": [
+   0.18,
+   0.204,
+   0.251,
+   0.97
+  ],
+  "fg": [
+   0.847,
+   0.871,
+   0.914
+  ],
+  "dim": [
+   0.58,
+   0.604,
+   0.647
+  ],
+  "ink": [
+   1,
+   1,
+   1
+  ],
+  "on_acc": [
+   0.063,
+   0.063,
+   0.063
+  ],
+  "tint": true,
+  "frame": "glow"
+ },
+ "mako": {
+  "background-color": "#2e3440ee",
+  "text-color": "#d8dee9",
+  "body": "#949aa5",
+  "low": "#949aa5"
+ },
+ "lock": {
+  "bg": "2e3440",
+  "panel": "2e3440d9",
+  "inner": "2e3440f2",
+  "text": "#d8dee9"
+ },
+ "ghostty": {
+  "background": "#2e3440",
+  "foreground": "#d8dee9",
+  "palette": [
+   "#3b4252",
+   "#bf616a",
+   "#a3be8c",
+   "#ebcb8b",
+   "#81a1c1",
+   "#b48ead",
+   "#88c0d0",
+   "#e5e9f0",
+   "#596377",
+   "#bf616a",
+   "#a3be8c",
+   "#ebcb8b",
+   "#81a1c1",
+   "#b48ead",
+   "#8fbcbb",
+   "#eceff4"
+  ]
+ },
+ "wall": "wall.jpg"
+}

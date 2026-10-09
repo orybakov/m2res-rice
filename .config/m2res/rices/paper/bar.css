@@ -1,0 +1,15 @@
+/* Paper: мягкие светлые пилюли */
+window#waybar { background: transparent; }
+{PILLS} {
+    border-radius: 12px; padding: 4px 14px; margin: 3px 4px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(60, 40, 20, 0.14);
+    font-weight: 600;
+}
+#memory { border-left: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px; }
+#workspaces button { border-radius: 12px; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(60,40,20,0.12); color: @pill_fg; font-family: "CaskaydiaMono Nerd Font Propo"; font-weight: 700; min-width: 24px; }
+#workspaces button label { font-family: "CaskaydiaMono Nerd Font Propo"; font-weight: 700; }
+#workspaces button.active { background: @accent; color: #ffffff; min-width: 44px; }
+#workspaces button.active label { color: #ffffff; }
+#clock { font-size: 14px; color: @pill_fg; }
+tooltip { background: @pill_bg; border: 1px solid rgba(0,0,0,0.12); }

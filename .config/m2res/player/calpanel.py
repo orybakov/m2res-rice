@@ -13,8 +13,10 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
 TIMER = os.path.expanduser("~/.config/m2res/scripts/m2res-timer"); TJSON = os.path.expanduser("~/.cache/m2res/timer.json")
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 WDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 PRESETS = [(5, "5"), (10, "10"), (15, "15"), (25, "25"), (50, "50")]
@@ -24,7 +26,7 @@ Y_HDR, Y_WD, Y_GRID = 0, 74, 104
 Y_TIMER = Y_GRID + 6 * CH + 20
 PH = Y_TIMER + 296
 RED, YEL = (1.0, 0.36, 0.48), (1.0, 0.82, 0.40)
-DIM, TXT = (0.55, 0.56, 0.52), (0.92, 0.92, 0.88)
+DIM, TXT = ST.n(0.55, 0.56, 0.52), ST.n(0.92, 0.92, 0.88)
 T_OPEN, T_CLOSE = 0.30, 0.16
 
 
@@ -186,9 +188,7 @@ class Cal(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", alpha=1.0):
         lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} {'Bold ' if bold else ''}{size}"))
@@ -217,10 +217,7 @@ class Cal(Gtk.ApplicationWindow):
 
     def panel(self, cr, now, t):
         A = self.acc; ox, oy = self.origin()
-        for i, a in ((16, 0.04), (10, 0.06), (5, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, ox - i, oy - i, PW + 2 * i, PH + 2 * i, 28 + i); cr.fill()
-        self.rr(cr, ox, oy, PW, PH, 28); cr.set_source_rgba(0.039, 0.039, 0.039, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.55); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, ox, oy, PW, PH, A, 28)
         self.calendar(cr, now, ox, oy); self.timer(cr, now, ox, oy)
 
     def calendar(self, cr, now, ox, oy):
@@ -228,7 +225,7 @@ class Cal(Gtk.ApplicationWindow):
         wm = self.text(cr, MONTHS[self.m - 1].upper(), 24, A, ox + PAD + 2, oy + 38, bold=True)
         self.text(cr, str(self.y), 24, DIM, ox + PAD + 2 + wm + 14, oy + 38)
         for k, ch in enumerate(("‹", "›")):
-            r = self.nav_rect(k); self.rr(cr, *r, 12); cr.set_source_rgba(1, 1, 1, 0.06); cr.fill()
+            r = self.nav_rect(k); self.rr(cr, *r, 12); cr.set_source_rgba(*ST.n(1, 1, 1, 0.06)); cr.fill()
             self.text(cr, ch, 26, A, r[0] + r[2] / 2, r[1] + r[3] / 2 - 2, bold=True, anchor="c")
         cr.set_source_rgba(*A, 0.28); cr.rectangle(ox + PAD, oy + 66, PW - 2 * PAD, 2); cr.fill()
         for i, d in enumerate(WDAYS):
@@ -246,7 +243,7 @@ class Cal(Gtk.ApplicationWindow):
                     self.rr(cr, x + 3, y + 3, CW - 6, CH - 6, 14); cr.set_source_rgba(*A, fade); cr.fill()
                     col = (0.08, 0.10, 0.0)
                 else:
-                    col = (RED if c >= 5 else TXT) if inm else (0.32, 0.33, 0.30)
+                    col = (RED if c >= 5 else TXT) if inm else ST.n(0.32, 0.33, 0.30)
                 self.text(cr, str(d.day), 17, col, x + CW / 2, y + CH / 2, bold=is_today, anchor="c", alpha=fade * (0.88 if (c >= 5 and inm and not is_today) else 1))
         cr.restore()
 
@@ -261,7 +258,7 @@ class Cal(Gtk.ApplicationWindow):
         self.text(cr, sub, 14, col if st != "idle" else DIM, ox + PW - PAD - 2, y0 + 14, anchor="r", bold=(st == "done"))
         # кольцо + время
         cx, cy, R = ox + PAD + 52, y0 + 76, 40
-        cr.set_line_width(8); cr.set_source_rgba(1, 1, 1, 0.08); cr.new_sub_path(); cr.arc(cx, cy, R, 0, 2 * math.pi); cr.stroke()
+        cr.set_line_width(8); cr.set_source_rgba(*ST.n(1, 1, 1, 0.08)); cr.new_sub_path(); cr.arc(cx, cy, R, 0, 2 * math.pi); cr.stroke()
         frac = (left / total) if total else 0
         if st == "done": frac = 1.0; col = (RED[0], RED[1], RED[2])
         if st != "idle" and frac > 0:
@@ -280,11 +277,11 @@ class Cal(Gtk.ApplicationWindow):
             r = self.chip_rect(i); pr = self.press.get(f"c{i}"); k = 1.0
             if pr is not None and (now - pr) < 0.3: k = 1 - 0.07 * math.sin((now - pr) / 0.3 * math.pi)
             cr.save(); cr.translate(r[0] + r[2] / 2, r[1] + r[3] / 2); cr.scale(k, k); cr.translate(-r[2] / 2, -r[3] / 2)
-            self.rr(cr, 0, 0, r[2], r[3], 14); cr.set_source_rgba(1, 1, 1, 0.06); cr.fill_preserve(); cr.set_source_rgba(*A, 0.3); cr.set_line_width(1.5); cr.stroke()
+            self.rr(cr, 0, 0, r[2], r[3], 14); cr.set_source_rgba(*ST.n(1, 1, 1, 0.06)); cr.fill_preserve(); cr.set_source_rgba(*A, 0.3); cr.set_line_width(1.5); cr.stroke()
             self.text(cr, f"{lab} мин", 15, TXT, r[2] / 2, r[3] / 2, bold=True, anchor="c"); cr.restore()
         # поле ввода
         fx, fy, fw, fh = self.field_rect()
-        self.rr(cr, fx, fy, fw, fh, 16); cr.set_source_rgba(1, 1, 1, 0.05); cr.fill_preserve()
+        self.rr(cr, fx, fy, fw, fh, 16); cr.set_source_rgba(*ST.n(1, 1, 1, 0.05)); cr.fill_preserve()
         bad = (now - self.err_t) < 0.5
         cr.set_source_rgba(*(RED if bad else A), 0.7 if bad else 0.3); cr.set_line_width(1.5); cr.stroke()
         if self.typed: wq = self.text(cr, self.typed, 20, TXT, fx + 16, fy + fh / 2, bold=True)
@@ -297,9 +294,9 @@ class Cal(Gtk.ApplicationWindow):
         self.rr(cr, 0, 0, r[2], r[3], 16); cr.set_source_rgba(*(col if st != "idle" else A), 0.95); cr.fill()
         self.text(cr, lab, 16, (0.08, 0.10, 0.0), r[2] / 2, r[3] / 2, bold=True, anchor="c"); cr.restore()
         r = self.btn_rect(1)
-        self.rr(cr, *r, 16); cr.set_source_rgba(1, 1, 1, 0.06); cr.fill_preserve(); cr.set_source_rgba(RED[0], RED[1], RED[2], 0.5); cr.set_line_width(1.5); cr.stroke()
+        self.rr(cr, *r, 16); cr.set_source_rgba(*ST.n(1, 1, 1, 0.06)); cr.fill_preserve(); cr.set_source_rgba(RED[0], RED[1], RED[2], 0.5); cr.set_line_width(1.5); cr.stroke()
         self.text(cr, "\U000f0156", 20, RED, r[0] + r[2] / 2, r[1] + r[3] / 2, anchor="c")
-        self.text(cr, "←/→ месяц · T сегодня · Enter · Пробел · Del", 12, (0.45, 0.46, 0.42), ox + PW / 2, oy + PH - 20, anchor="c")
+        self.text(cr, "←/→ месяц · T сегодня · Enter · Пробел · Del", 12, ST.n(0.45, 0.46, 0.42), ox + PW / 2, oy + PH - 20, anchor="c")
 
 
 class App(Gtk.Application):

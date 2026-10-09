@@ -1,4 +1,9 @@
 @import url("colors.css");
+@define-color pill_bg rgba(8, 8, 8, 0.92);
+@define-color pill_hover rgba(30, 30, 30, 0.96);
+@define-color pill_fg #e8e8e8;
+@define-color pill_dim #bdbdbd;
+@define-color pill_ink #0a0a0a;
 
 * {
     font-family: "CaskaydiaMono Nerd Font";
@@ -12,8 +17,8 @@
 }
 
 window#waybar { background: transparent; color: @accent; }
-tooltip { background: #0a0a0a; border-radius: 10px; border: 1px solid alpha(@accent, 0.4); }
-tooltip label { color: #e8e8e8; padding: 4px 8px; }
+tooltip { background: @pill_bg; border-radius: 10px; border: 1px solid alpha(@accent, 0.4); }
+tooltip label { color: @pill_fg; padding: 4px 8px; }
 
 /* общие чёрные пилюли */ #custom-rec,
 #custom-profile,
@@ -26,7 +31,7 @@ tooltip label { color: #e8e8e8; padding: 4px 8px; }
 #language,
 #tray,
 #clock {
-    background: rgba(8, 8, 8, 0.92);
+    background: @pill_bg;
     color: @accent;
     border-radius: 10px;
     padding: 4px 12px;
@@ -39,8 +44,8 @@ tooltip label { color: #e8e8e8; padding: 4px 8px; }
 /* воркспейсы: круглые чёрные, активный — широкая акцентная пилюля */
 #workspaces { background: transparent; }
 #workspaces button {
-    background: rgba(8, 8, 8, 0.92);
-    color: #e8e8e8;
+    background: @pill_bg;
+    color: @pill_fg;
     font-family: "Liberation Serif", "FreeSerif", serif;
     font-weight: 900;
     font-size: 14px;
@@ -50,7 +55,7 @@ tooltip label { color: #e8e8e8; padding: 4px 8px; }
     border-radius: 16px;
     transition: all 200ms cubic-bezier(.3, 1.4, .5, 1);
 }
-#workspaces button:hover { background: rgba(40, 40, 40, 0.95); }
+#workspaces button:hover { background: @pill_hover; }
 #workspaces button.active {
     background: @accent;
     color: @on_accent;
@@ -58,7 +63,7 @@ tooltip label { color: #e8e8e8; padding: 4px 8px; }
 }
 #workspaces button.urgent { background: @error; }
 
-#language { color: #e8e8e8; }
+#language { color: @pill_fg; }
 #tray > .passive { -gtk-icon-effect: dim; }
 #clock { color: @accent; font-size: 14px; }
 
@@ -73,24 +78,28 @@ tooltip label { color: #e8e8e8; padding: 4px 8px; }
 /* лимиты: риска по худшему показателю */
 
 /* ── громкость ───────────────────────────────────────────────── */
-#pulseaudio { color: #f4f4f4; font-size: 13px; font-weight: bold; padding: 4px 12px; }
-#pulseaudio:hover { background-color: rgba(30, 30, 30, 0.96); }
+#pulseaudio { color: @pill_fg; font-size: 13px; font-weight: bold; padding: 4px 12px; }
+#pulseaudio:hover { background-color: @pill_hover; }
 #pulseaudio.muted { color: #ff5c7a; }
 
 /* ── колокольчик уведомлений ─────────────────────────────────── */
-#custom-notif { color: #bdbdbd; font-size: 14px; font-weight: bold; padding: 4px 12px; }
-#custom-notif.new  { color: #0a0a0a; background-color: @accent; }
-#custom-notif.crit { color: #0a0a0a; background-color: #ff5c7a; }
+#custom-notif { color: @pill_dim; font-size: 14px; font-weight: bold; padding: 4px 12px; }
+#custom-notif.new  { color: @pill_ink; background-color: @accent; }
+#custom-notif.crit { color: @pill_ink; background-color: #ff5c7a; }
 #custom-notif.dnd  { color: #ff5c7a; }
-#custom-notif:hover { background-color: rgba(30, 30, 30, 0.96); }
+#custom-notif:hover { background-color: @pill_hover; }
 
 /* таймер: виден только пока запущен */
 #custom-timer { font-weight: bold; }
-#custom-control { color: #bdbdbd; font-size: 16px; padding: 4px 12px; }
-#custom-control:hover { background-color: rgba(30, 30, 30, 0.96); color: @accent; }
+#custom-control { color: @pill_dim; font-size: 16px; padding: 4px 12px; }
+#custom-control:hover { background-color: @pill_hover; color: @accent; }
 #custom-timer.paused { color: #ffd166; }
-#custom-timer.done { color: #0a0a0a; background-color: #ff5c7a; }
-#clock:hover { background-color: rgba(30, 30, 30, 0.96); }
+#custom-timer.done { color: @pill_ink; background-color: #ff5c7a; }
+#clock:hover { background-color: @pill_hover; }
 
-#custom-profile.on { color: #0a0a0a; background-color: @accent; font-weight: bold; padding: 4px 12px; }
-#custom-rec.rec { color: #0a0a0a; background-color: #ff5c7a; font-weight: bold; padding: 4px 12px; }
+#custom-profile.on { color: @pill_ink; background-color: @accent; font-weight: bold; padding: 4px 12px; }
+#custom-rec.rec { color: @pill_ink; background-color: #ff5c7a; font-weight: bold; padding: 4px 12px; }
+
+/* ── райс: m2res ── */
+/* оригинал: стили в style.base.css */
+

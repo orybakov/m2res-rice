@@ -1,0 +1,11 @@
+/* TTY: плоский моноширинный бар */
+window#waybar { background: #000a03; border-bottom: 1px solid @accent; }
+* { font-family: "Noto Sans Mono"; font-size: 12px; font-weight: 600; }
+{PILLS} { border-radius: 0; background: transparent; border: none; border-right: 1px solid alpha(@accent, 0.35); padding: 0 10px; margin: 0; box-shadow: none; }
+#memory { border-left: none; border-radius: 0; }
+#workspaces button { border-radius: 0; background: transparent; border: none; border-right: 1px solid alpha(@accent, 0.35); color: @pill_dim; min-width: 18px; margin: 0; padding: 0 8px; font-family: "Noto Sans Mono"; font-weight: 700; transition: none; }
+#workspaces button label { font-family: "Noto Sans Mono"; font-size: 12px; font-weight: 700; }
+#workspaces button.active { background: @accent; color: #001a08; min-width: 18px; }
+#workspaces button.active label { color: #001a08; }
+{PILLS}:hover, #workspaces button:hover { background: @pill_hover; }
+tooltip { border-radius: 0; border: 1px solid @accent; background: #000a03; }

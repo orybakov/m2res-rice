@@ -16,11 +16,13 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0"); gi.
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONT = "CaskaydiaMono Nerd Font Mono"
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
+FONT = ST.font
 TW, TH, GAP, PAD = 340, 190, 18, 26
 CARD_H = TH + 70
 MAXWIN = 16
-DIM, TXT = (0.55, 0.56, 0.52), (0.92, 0.92, 0.88)
+DIM, TXT = ST.n(0.55, 0.56, 0.52), ST.n(0.92, 0.92, 0.88)
 T_IN, T_OUT = 0.16, 0.10
 WATCHDOG = 20.0
 
@@ -260,9 +262,7 @@ class Switch(Gtk.ApplicationWindow):
 
     # ----- рисование -----
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", alpha=1.0, width=None):
         lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} {'Bold ' if bold else ''}{size}"))
@@ -283,10 +283,7 @@ class Switch(Gtk.ApplicationWindow):
 
     def panel(self, cr, now, k, cw, ch, gap, px, py, pw, ph):
         A = self.acc
-        for i, a in ((16, 0.04), (10, 0.06), (5, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, px - i, py - i, pw + 2 * i, ph + 2 * i, 28 + i); cr.fill()
-        self.rr(cr, px, py, pw, ph, 28); cr.set_source_rgba(0.039, 0.039, 0.039, 0.96); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.5); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, px, py, pw, ph, A, 28)
         # рамка выбора
         if self.hlx is not None:
             cy = py + PAD; pulse = 0.5 + 0.5 * math.sin(now * 4)
@@ -301,7 +298,7 @@ class Switch(Gtk.ApplicationWindow):
     def card(self, cr, i, c, k, cw, ch):
         A = self.acc; x, y, w, h = self.card_rect(i); sel = i == self.sel
         th = int(TH * k)
-        self.rr(cr, x, y, w, th, 14 * k); cr.set_source_rgba(1, 1, 1, 0.05); cr.fill()
+        self.rr(cr, x, y, w, th, 14 * k); cr.set_source_rgba(*ST.n(1, 1, 1, 0.05)); cr.fill()
         t = THUMBS.get(c["address"])
         if t:
             pb = t[0]; s = min((w - 8 * k) / pb.get_width(), (th - 8 * k) / pb.get_height())
@@ -318,7 +315,7 @@ class Switch(Gtk.ApplicationWindow):
         tx = x + 6
         if ic: Gdk.cairo_set_source_pixbuf(cr, ic, tx, ty - 18); cr.paint(); tx += 46
         title = c.get("title") or c["class"]
-        self.text(cr, title, 15, TXT if sel else (0.72, 0.73, 0.68), tx, ty - 8 * k, bold=sel, width=x + w - tx - 6)
+        self.text(cr, title, 15, TXT if sel else ST.n(0.72, 0.73, 0.68), tx, ty - 8 * k, bold=sel, width=x + w - tx - 6)
         self.text(cr, c["class"].split(".")[-1], 12, DIM, tx, ty + 10 * k, width=x + w - tx - 6)
         if not c["_vis"]:
             wsid = c["workspace"]["id"]; self.rr(cr, x + w - 48, y + 8, 40, 24, 12); cr.set_source_rgba(0, 0, 0, 0.75); cr.fill()

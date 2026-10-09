@@ -13,6 +13,8 @@ from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Gtk4LayerShell as LS
 import cairo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
 CACHE = os.path.expanduser("~/.cache/m2res"); os.makedirs(CACHE, exist_ok=True)
 
 
@@ -156,14 +158,17 @@ class Player(Gtk.ApplicationWindow):
         LS.set_keyboard_mode(self, LS.KeyboardMode.ON_DEMAND)
 
         css = Gtk.CssProvider()
+        rad = {"square": 0, "chamfer": 6, "pill": 44}.get(ST.shape, int(26 * ST.rk)); rad_s = {"square": 0, "chamfer": 3, "pill": 16}.get(ST.shape, int(8 * ST.rk))
+        rgba = lambda c, a=None: "rgba(%d,%d,%d,%.2f)" % (c[0] * 255, c[1] * 255, c[2] * 255, a if a is not None else (c[3] if len(c) > 3 else 1))
+        ink = rgba(ST.fg, 1); bw = max(2, int(round(ST.border_w)))
         css.load_from_data(f"""
         window {{ background: transparent; }}
-        .card {{ background: rgba(6,6,8,0.94); border-radius: 26px; padding: 22px; border: 2px solid {self.col['accent']}; }}
-        .pill {{ background: rgba(0,0,0,0.85); color: {self.col['accent']}; border: 2px solid {self.col['accent']};
-                 border-radius: 8px; padding: 2px 10px; font-family: 'CaskaydiaMono Nerd Font Mono'; font-weight: 800; font-size: 13px; }}
+        .card {{ background: {rgba(ST.bg)}; border-radius: {rad}px; padding: 22px; border: {bw}px solid {self.col['accent']}; }}
+        .pill {{ background: {rgba(ST.bg, 0.85)}; color: {self.col['accent']}; border: 2px solid {self.col['accent']};
+                 border-radius: {rad_s}px; padding: 2px 10px; font-family: '{ST.font}'; font-weight: 800; font-size: 13px; }}
         .title {{ font-size: 15px; }}
         .btn {{ background: transparent; color: {self.col['accent']}; border: none; box-shadow: none; font-size: 30px; padding: 0 10px; min-width: 0; }}
-        .btn:hover {{ color: #ffffff; }}
+        .btn:hover {{ color: {ink}; }}
         .play {{ font-size: 42px; }}
         """.encode())
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)

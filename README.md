@@ -21,6 +21,14 @@
 |:--:|:--:|
 | ![Уведомления](docs/notif.jpg) | <img src="docs/dock.jpg" width="100"> |
 
+## Райсы — переключатель оформления
+
+Один райс меняет всё: палитру, обои, Waybar, геометрию и анимации Hyprland, форму и стиль виджетов, уведомления, экран блокировки, Ghostty, док и звуки. 7 авторских райсов (m2res, paper, zen, brutal, cyber, glass, tty) и 6 из тем `~/.local/share/dotfiles/themes`.
+
+![Райсы: m2res, paper, zen, brutal, cyber, glass, tty, nord, osaka-jade](docs/rices.jpg)
+
+`SUPER+ALT+R` — карусель с превью: **Enter** примеряет райс на 10 секунд, потом «оставить?» (Enter — оставить, Esc — вернуть; без ответа вернётся само). В консоли: `m2res-rice list|apply|preview|back|shoot|new|pack|install|import-themes`. Подробнее — в [README райса](.config/m2res/README.md#райсы--переключатель-оформления-m2res-rice).
+
 ## Установка
 
 ```bash

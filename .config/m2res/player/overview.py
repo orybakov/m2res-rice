@@ -10,10 +10,12 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONT = "CaskaydiaMono Nerd Font Mono"
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
+FONT = ST.font
 MARG, PAD, GAP, PER_ROW = 40, 28, 22, 5
 T_OPEN, T_CLOSE = 0.26, 0.13
-DIM, TXT = (0.55, 0.56, 0.52), (0.92, 0.92, 0.88)
+DIM, TXT = ST.n(0.55, 0.56, 0.52), ST.n(0.92, 0.92, 0.88)
 
 
 def ease_out_quart(t):
@@ -130,9 +132,7 @@ class Over(Gtk.ApplicationWindow):
 
     # ---- рисование ----
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", width=None, alpha=1.0):
         lay = PangoCairo.create_layout(cr)
@@ -159,10 +159,7 @@ class Over(Gtk.ApplicationWindow):
 
     def panel(self, cr):
         A = self.acc; x0 = y0 = MARG
-        for i, a in ((18, 0.04), (12, 0.06), (6, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, x0 - i, y0 - i, self.PW + 2 * i, self.PH + 2 * i, 30 + i); cr.fill()
-        self.rr(cr, x0, y0, self.PW, self.PH, 30); cr.set_source_rgba(0.039, 0.039, 0.039, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.55); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, x0, y0, self.PW, self.PH, A, 30)
         self.text(cr, "WORKSPACES", 22, A, x0 + PAD, y0 + PAD + 8, bold=True)
         self.text(cr, "клик · 1–9, 0 · ←→↑↓ · Enter · Esc", 13, DIM, x0 + self.PW - PAD, y0 + PAD + 10, anchor="r")
         k = self.CW / self.mw

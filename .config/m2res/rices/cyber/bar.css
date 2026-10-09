@@ -1,0 +1,12 @@
+/* Cyber: неоновые рамки с свечением */
+window#waybar { background: rgba(5, 3, 15, 0.78); border-bottom: 2px solid @accent; box-shadow: 0 0 14px alpha(@accent, 0.55); }
+{PILLS} {
+    border-radius: 0; border: 1px solid alpha(@accent, 0.7); padding: 2px 12px; margin: 3px 4px;
+    box-shadow: 0 0 8px alpha(@accent, 0.35); text-shadow: 0 0 6px alpha(@accent, 0.6);
+}
+#memory { border-left: 3px solid @accent; border-radius: 0; }
+#workspaces button { border-radius: 0; border: 1px solid alpha(@accent, 0.55); background: @pill_bg; color: @pill_fg; font-family: "CaskaydiaMono Nerd Font Mono"; font-weight: 800; margin: 3px 4px; min-width: 22px; box-shadow: 0 0 6px alpha(@accent, 0.25); }
+#workspaces button label { font-family: "CaskaydiaMono Nerd Font Mono"; font-size: 13px; }
+#workspaces button.active { background: alpha(@accent, 0.9); color: #05030f; min-width: 42px; box-shadow: 0 0 14px @accent; text-shadow: none; }
+#workspaces button.active label { color: #05030f; }
+tooltip { border-radius: 0; border: 1px solid @accent; background: @pill_bg; }

@@ -9,13 +9,15 @@
 Запуск: m2res-volume daemon"""
 import sys, os, signal, subprocess, time, math
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from style import ST  # noqa: E402
 import cairo  # noqa: E402
 import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0")
 gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 SINK = "@DEFAULT_AUDIO_SINK@"
 HOLD, LEAVE_DELAY = 1.6, 0.5
 EDGE = 2                      # ширина горячей полосы, px
@@ -155,10 +157,7 @@ class Vol(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rrect(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2)
-        cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def glyph(self, cr, s, cx, cy, size, color):
         lay = PangoCairo.create_layout(cr)
@@ -171,19 +170,19 @@ class Vol(Gtk.ApplicationWindow):
         if self.p <= 0.001: return
         oy = self.oy(); off = (1 - self.p) * (HW + 40)
         cr.translate(off, 0)
-        self.rrect(cr, REST_X, oy, HW + 80, PH, 28); cr.set_source_rgb(0, 0, 0); cr.fill()
+        self.rrect(cr, REST_X, oy, HW + 80, PH, 28); cr.set_source_rgb(*ST.bg[:3]); cr.fill()
         px, py, pw0, ph = self.pill_box(); pw = pw0 * self.wf; px += (pw0 - pw) / 2
-        self.rrect(cr, px, py, pw, ph, pw / 2); cr.set_source_rgb(0.20, 0.20, 0.22); cr.fill()
+        self.rrect(cr, px, py, pw, ph, pw / 2); cr.set_source_rgb(*ST.n(0.20, 0.20, 0.22)); cr.fill()
         fh = ph * max(0.0, min(1.0, self.shown_v))
         if fh > 0 and pw > 3:
             cr.save(); self.rrect(cr, px, py, pw, ph, pw / 2); cr.clip()
-            cr.rectangle(px, py + ph - fh, pw, fh); cr.set_source_rgb(1, 1, 1); cr.fill(); cr.restore()
+            cr.rectangle(px, py + ph - fh, pw, fh); cr.set_source_rgb(*ST.n(1, 1, 1)); cr.fill(); cr.restore()
         if self.wf > 0.6:
             cx = px + pw / 2
             red = (1, 0.36, 0.48)
-            self.glyph(cr, "mute" if self.muted else f"{round(self.vol * 100)}", cx, oy + 32, 15, red if self.muted else (1, 1, 1))
+            self.glyph(cr, "mute" if self.muted else f"{round(self.vol * 100)}", cx, oy + 32, 15, red if self.muted else ST.n(1, 1, 1))
             icon = "󰖁" if self.muted else ("󰕿" if self.vol < 0.34 else ("󰖀" if self.vol < 0.67 else "󰕾"))
-            self.glyph(cr, icon, cx, oy + 345, 26, red if self.muted else (0.92, 0.92, 0.92))
+            self.glyph(cr, icon, cx, oy + 345, 26, red if self.muted else ST.n(0.92, 0.92, 0.92))
 
 
 class App(Gtk.Application):

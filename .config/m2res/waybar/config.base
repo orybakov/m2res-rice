@@ -1,0 +1,135 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 30,
+    "margin-top": 6,
+    "margin-left": 10,
+    "margin-right": 10,
+    "spacing": 0,
+    "reload_style_on_change": true,
+    "modules-left": [
+        "memory"
+    ],
+    "modules-center": [
+        "hyprland/workspaces"
+    ],
+    "modules-right": [
+        "pulseaudio",
+        "custom/weather",
+        "hyprland/language",
+        "tray",
+        "custom/profile",
+        "custom/rec",
+        "custom/notif",
+        "custom/timer",
+        "clock",
+        "custom/rice",
+        "custom/control"
+    ],
+    "memory": {
+        "interval": 3,
+        "format": "<span color='#8a8a8a' size='x-small'>RAM</span> {used:0.1f}G",
+        "tooltip-format": "{used:0.1f}G / {total:0.1f}G ({percentage}%)",
+        "on-click": "ghostty -e btop"
+    },
+    "hyprland/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "on-click": "activate",
+        "format": "{id}",
+        "persistent-workspaces": {
+            "*": [
+                1,
+                2,
+                3,
+                10
+            ]
+        },
+        "ignore-workspaces": [
+            "^-.*",
+            "special.*",
+            "gaming"
+        ]
+    },
+    "custom/weather": {
+        "exec": "~/.config/m2res/scripts/weather",
+        "return-type": "json",
+        "interval": 900
+    },
+    "hyprland/language": {
+        "format": "{short}",
+        "on-click": "hyprctl switchxkblayout all next"
+    },
+    "tray": {
+        "icon-size": 16,
+        "spacing": 8
+    },
+    "clock": {
+        "interval": 1,
+        "format": "<span color='#8a8a8a' size='x-small'>{0:%a %d.%m}</span>  {0:%H:%M}",
+        "tooltip": false,
+        "on-click": "~/.config/m2res/scripts/m2res-calendar toggle"
+    },
+    "custom/timer": {
+        "exec": "~/.config/m2res/scripts/m2res-timer waybar",
+        "return-type": "json",
+        "interval": 1,
+        "on-click": "~/.config/m2res/scripts/m2res-calendar toggle",
+        "on-click-right": "~/.config/m2res/scripts/m2res-timer stop"
+    },
+    "pulseaudio": {
+        "format": "{icon} {volume}",
+        "format-muted": "󰖁 mute",
+        "format-icons": {
+            "default": [
+                "󰕿",
+                "󰖀",
+                "󰕾"
+            ]
+        },
+        "scroll-step": 5,
+        "tooltip": false,
+        "on-click": "~/.config/m2res/scripts/m2res-volume mute",
+        "on-click-right": "pavucontrol",
+        "on-scroll-up": "~/.config/m2res/scripts/m2res-volume up",
+        "on-scroll-down": "~/.config/m2res/scripts/m2res-volume down"
+    },
+    "custom/profile": {
+        "exec": "~/.config/m2res/scripts/m2res-profile json",
+        "return-type": "json",
+        "interval": 30,
+        "signal": 11,
+        "on-click": "~/.config/m2res/scripts/m2res-profile cycle"
+    },
+    "custom/rec": {
+        "exec": "~/.config/m2res/scripts/m2res-rec json",
+        "return-type": "json",
+        "interval": 1,
+        "signal": 10,
+        "on-click": "~/.config/m2res/scripts/m2res-rec stop"
+    },
+    "custom/control": {
+        "format": "󰒓",
+        "tooltip-format": "Центр управления (SUPER+X)",
+        "tooltip": true,
+        "on-click": "~/.config/m2res/scripts/m2res-control toggle"
+    },
+    "custom/notif": {
+        "exec": "~/.config/m2res/scripts/notif-count",
+        "return-type": "json",
+        "interval": 30,
+        "signal": 9,
+        "tooltip": false,
+        "on-click": "~/.config/m2res/scripts/m2res-center toggle",
+        "on-click-right": "makoctl mode -t do-not-disturb; pkill -RTMIN+9 -x waybar"
+    },
+    "custom/rice": {
+        "exec": "~/.config/m2res/scripts/m2res-rice json",
+        "return-type": "json",
+        "interval": 60,
+        "signal": 12,
+        "tooltip": true,
+        "on-click": "~/.config/m2res/scripts/m2res-rice pick",
+        "on-click-right": "~/.config/m2res/scripts/m2res-rice next"
+    }
+}

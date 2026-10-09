@@ -4,13 +4,15 @@
 Запуск: m2res-layout daemon"""
 import sys, os, socket, threading, time, math
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from style import ST  # noqa: E402
 import cairo  # noqa: E402
 import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0")
 gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 ACC = (0.690, 0.835, 0.0)
 W, H = 520, 190
 HOLD = 1.25
@@ -96,7 +98,7 @@ class Osd(Gtk.ApplicationWindow):
             cr.arc(x + pw - r, y + r, r + pad, -math.pi / 2, math.pi / 2); cr.close_path()
         for i, aa in ((14, 0.05), (9, 0.08), (5, 0.12)):          # свечение
             cr.set_source_rgba(*ACC, aa * al); pill(i); cr.fill()
-        pill(); cr.set_source_rgba(0.04, 0.04, 0.04, 0.96 * al); cr.fill_preserve()
+        pill(); cr.set_source_rgba(*ST.bg[:3], 0.96 * al); cr.fill_preserve()
         cr.set_source_rgba(*ACC, 0.9 * al); cr.set_line_width(3); cr.stroke()
         # бегущий блик по рамке в момент переключения
         if t < 0.55:
@@ -114,7 +116,7 @@ class Osd(Gtk.ApplicationWindow):
         # индикатор: две точки под подписью
         for i, c in enumerate(("RU", "EN")):
             on = c == self.code
-            cr.set_source_rgba(*(ACC if on else (0.45, 0.45, 0.41)), (1 if on else 0.6) * al)
+            cr.set_source_rgba(*(ACC if on else ST.n(0.45, 0.45, 0.41)), (1 if on else 0.6) * al)
             cr.arc(x + pw - 30 * sc - cw + 5 + i * 14, cy + chh / 2 + 13 * sc, 4.0 * sc, 0, 6.3); cr.fill()
 
 

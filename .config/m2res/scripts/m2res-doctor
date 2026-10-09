@@ -143,6 +143,24 @@ def check():
     sz = sum(os.path.getsize(f) for f in nb if os.path.isfile(f)) / 1048576
     out("PASS" if sz < 50 else "WARN", f"бэкапов: {len(nb)} шт, {sz:.1f} МБ", "m2res-doctor snapshot, затем можно чистить *.bak-*")
 
+    sec("Райсы")
+    rice = f"{M2}/scripts/m2res-rice"
+    if os.path.exists(rice):
+        v = subprocess.run([rice, "validate"], capture_output=True, text=True, timeout=30).stdout.splitlines()
+        badr = [l[5:] for l in v if l.startswith("FAIL")]
+        out("PASS" if not badr else "FAIL", f"райсы валидны ({sum(1 for l in v if l.startswith('PASS'))} шт)", "; ".join(badr)[:120])
+        try: cur = open(f"{M2}/rice.current").read().strip()
+        except Exception: cur = ""
+        out("PASS" if cur and os.path.isdir(f"{M2}/rices/{cur}") else "FAIL", f"текущий райс: {cur or 'не задан'}", "m2res-rice apply m2res")
+        try: sj = json.load(open(f"{M2}/player/style.json")); out("PASS" if sj.get("name") == cur else "WARN", "style.json соответствует райсу", "m2res-rice regen")
+        except Exception: out("WARN", "style.json не читается", "m2res-rice regen")
+        try:
+            wc = json.load(open(f"{M2}/waybar/config"))
+            out("PASS" if any("custom/rice" in (wc.get(k) or []) for k in ("modules-right", "modules-left", "modules-center")) else "WARN", "значок райса в Waybar")
+        except Exception: out("WARN", "конфиг Waybar не читается")
+        out("PASS" if sh("pgrep", "-f", "player/(dock|switcher)\\.py", t=3) else "WARN", "демоны виджетов работают на стиле райса")
+    else: out("WARN", "m2res-rice не установлен")
+
     sec("Снимки")
     try:
         ts = int(subprocess.run(["git", "-C", SNAP, "log", "-1", "--format=%ct"], capture_output=True, text=True).stdout.strip())

@@ -12,14 +12,16 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0"); gi.
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
 D = os.path.expanduser("~/.local/share/m2res/clipboard"); IDX = f"{D}/index.json"
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 LW, RW, PAD, MARG = 520, 640, 24, 40
 PW = PAD * 3 + LW + RW; ROW, ROWS = 62, 9
 HDR = 112; PH = HDR + ROWS * ROW + 54
 T_OPEN, T_CLOSE = 0.28, 0.14
 RU = dict(zip("йцукенгшщзхъфывапролджэячсмитьбю.ё", "qwertyuiop[]asdfghjkl;'zxcvbnm,./`"))
-DIM, TXT = (0.55, 0.56, 0.52), (0.92, 0.92, 0.88)
+DIM, TXT = ST.n(0.55, 0.56, 0.52), ST.n(0.92, 0.92, 0.88)
 
 
 def accent():
@@ -189,9 +191,7 @@ class Clip(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", alpha=1.0, width=None, lines=1, line_h=None):
         lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} {'Bold ' if bold else ''}{size}"))
@@ -213,15 +213,12 @@ class Clip(Gtk.ApplicationWindow):
 
     def panel(self, cr, now):
         A = self.acc; x0, y0 = MARG, MARG
-        for i, a in ((18, 0.04), (12, 0.06), (6, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, x0 - i, y0 - i, PW + 2 * i, PH + 2 * i, 30 + i); cr.fill()
-        self.rr(cr, x0, y0, PW, PH, 30); cr.set_source_rgba(0.039, 0.039, 0.039, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.55); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, x0, y0, PW, PH, A, 30)
         # поиск
         sx, sy, sw, sh = x0 + PAD, y0 + 26, PW - 2 * PAD, 56
-        self.rr(cr, sx, sy, sw, sh, 28); cr.set_source_rgba(1, 1, 1, 0.05); cr.fill_preserve(); cr.set_source_rgba(*A, 0.35); cr.set_line_width(1.5); cr.stroke()
+        self.rr(cr, sx, sy, sw, sh, 28); cr.set_source_rgba(*ST.n(1, 1, 1, 0.05)); cr.fill_preserve(); cr.set_source_rgba(*A, 0.35); cr.set_line_width(1.5); cr.stroke()
         cr.set_source_rgba(*A, 1); self.rr(cr, sx + 14, sy + 14, 62, 28, 14); cr.fill()
-        self.text(cr, "CLIP", 14, (0.04, 0.04, 0.04), sx + 45, sy + sh / 2, bold=True, anchor="c")
+        self.text(cr, "CLIP", 14, ST.on_acc, sx + 45, sy + sh / 2, bold=True, anchor="c")
         q = self.query
         if q: wq = self.text(cr, q, 22, TXT, sx + 96, sy + sh / 2, width=sw - 330)
         else: wq = 0; self.text(cr, "поиск по истории…", 20, DIM, sx + 96, sy + sh / 2)
@@ -246,10 +243,10 @@ class Clip(Gtk.ApplicationWindow):
             cr.set_source_rgba(*A, 0.45); self.rr(cr, lx + LW + 8, ty, 4, th, 2); cr.fill()
         # предпросмотр
         rx, ry2, rw, rh = x0 + PAD * 2 + LW, y0 + HDR, RW, ROWS * ROW
-        self.rr(cr, rx, ry2, rw, rh, 20); cr.set_source_rgba(1, 1, 1, 0.035); cr.fill_preserve(); cr.set_source_rgba(*A, 0.22); cr.set_line_width(1.5); cr.stroke()
+        self.rr(cr, rx, ry2, rw, rh, 20); cr.set_source_rgba(*ST.n(1, 1, 1, 0.035)); cr.fill_preserve(); cr.set_source_rgba(*A, 0.22); cr.set_line_width(1.5); cr.stroke()
         if self.view: self.preview(cr, self.view[self.sel], rx, ry2, rw, rh)
         # подвал
-        self.text(cr, "↑↓ выбор   Enter копировать   Ctrl+P закрепить   Del удалить   Ctrl+Shift+Del очистить   Esc закрыть", 13, (0.5, 0.51, 0.47), x0 + PW / 2, y0 + PH - 27, anchor="c")
+        self.text(cr, "↑↓ выбор   Enter копировать   Ctrl+P закрепить   Del удалить   Ctrl+Shift+Del очистить   Esc закрыть", 13, ST.n(0.5, 0.51, 0.47), x0 + PW / 2, y0 + PH - 27, anchor="c")
         if self.flash and self.close_at:
             f = max(0.0, 1 - (now - self.flash) / 0.2); cr.set_source_rgba(*A, 0.22 * f); self.rr(cr, x0, y0, PW, PH, 30); cr.fill()
 
@@ -260,10 +257,10 @@ class Clip(Gtk.ApplicationWindow):
             th = self.thumb(it["file"], (64, 44))
             if th:
                 pb = th[0]; Gdk.cairo_set_source_pixbuf(cr, pb, tx, cy - pb.get_height() / 2); cr.paint()
-                self.text(cr, f"картинка  {th[1]}×{th[2]}", 17, TXT if sel else (0.78, 0.79, 0.74), tx + 80, cy)
+                self.text(cr, f"картинка  {th[1]}×{th[2]}", 17, TXT if sel else ST.n(0.78, 0.79, 0.74), tx + 80, cy)
             else: self.text(cr, "картинка", 17, TXT, tx, cy)
         else:
-            one = " ".join(it["text"].split()); self.text(cr, one, 17, TXT if sel else (0.78, 0.79, 0.74), tx, cy, width=LW - (tx - x) - 86)
+            one = " ".join(it["text"].split()); self.text(cr, one, 17, TXT if sel else ST.n(0.78, 0.79, 0.74), tx, cy, width=LW - (tx - x) - 86)
         self.text(cr, ago(it["ts"]), 13, DIM, x + LW - 14, cy, anchor="r")
 
     def preview(self, cr, it, x, y, w, h):

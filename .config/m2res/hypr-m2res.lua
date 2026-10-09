@@ -93,7 +93,12 @@ do
     local txt = f and f:read("*a") or ""
     if f then f:close() end
     local hex = txt:match('"accent"%s*:%s*"#(%x%x%x%x%x%x)"')
-    if hex then
+    local sf = io.open(os.getenv("HOME") .. "/.config/m2res/player/style.json")
+    local stxt = sf and sf:read("*a") or ""
+    if sf then sf:close() end
+    if hex and stxt:match('"border"%s*:%s*"solid"') then
+        hl.config({ general = { col = { active_border = "rgba(" .. hex .. "ff)", inactive_border = "rgba(" .. hex .. "30)" } } })
+    elseif hex then
         local r, g, b = tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16)
         local dark = string.format("%02x%02x%02x", math.floor(r * 0.35), math.floor(g * 0.35), math.floor(b * 0.35))
         hl.config({ general = { col = {
@@ -111,3 +116,17 @@ hl.bind("SUPER + CTRL + P", hl.dsp.exec_cmd(m2 .. "/m2res-profile cycle"))
 
 -- ── боковая панель для 32:9 (m2res-dock): SUPER+SHIFT+B — показать/скрыть ──
 hl.bind("SUPER + SHIFT + B", hl.dsp.exec_cmd(m2 .. "/m2res-dock toggle"))
+
+-- ── райс (m2res-rice): геометрия, анимации и рамки выбранного райса; файл пишет m2res-rice apply ──
+do
+    local f = io.open(os.getenv("HOME") .. "/.config/m2res/rice-hypr.lua")
+    if f then
+        f:close()
+        local ok, err = pcall(dofile, os.getenv("HOME") .. "/.config/m2res/rice-hypr.lua")
+        if not ok then print("rice-hypr.lua: " .. tostring(err)) end
+    end
+end
+
+-- ── переключатель райсов: SUPER+ALT+R — карточки с живым предпросмотром, SUPER+ALT+SHIFT+R — следующий райс ──
+hl.bind("SUPER + ALT + R", hl.dsp.exec_cmd(m2 .. "/m2res-rice pick"))
+hl.bind("SUPER + ALT + SHIFT + R", hl.dsp.exec_cmd(m2 .. "/m2res-rice next"))

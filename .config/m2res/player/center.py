@@ -12,9 +12,11 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
 DATA = os.path.expanduser("~/.local/share/m2res")
 LOG, SEEN = f"{DATA}/notifications.jsonl", f"{DATA}/notif_seen"
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 T_ENTER, T_EXIT = 0.40, 0.24
 CARD_W, PAD, GAP, HEAD = 450, 16, 10, 76
 RED, YEL, GREEN = (1.0, 0.36, 0.48), (1.0, 0.82, 0.40), (0.49, 1.0, 0.63)
@@ -170,10 +172,7 @@ class Center(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rrect(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2)
-        cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def lay(self, cr, s, size, bold=True, width=None):
         l = PangoCairo.create_layout(cr)
@@ -196,14 +195,14 @@ class Center(Gtk.ApplicationWindow):
         if active: cr.set_source_rgb(*fg)
         else: cr.set_source_rgb(*(tuple(min(1, c + 0.08) for c in bg) if hov else bg))
         cr.fill()
-        cr.move_to(x0 + 11, cy - h / 2); cr.set_source_rgb(*((0.05, 0.05, 0.05) if active else fg)); PangoCairo.show_layout(cr, l)
+        cr.move_to(x0 + 11, cy - h / 2); cr.set_source_rgb(*(ST.on_acc if active else fg)); PangoCairo.show_layout(cr, l)
         if kind: self.hits.append((kind, (x0, y0, bw, bh), payload))
         return x0 - 10
 
     def draw_item(self, cr, n, x, y, w, now):
         key = (n["ts"], n["id"])
         urg = n.get("urgency", "normal")
-        col = RED if urg == "critical" else ((0.45, 0.45, 0.48) if urg == "low" else self.accent)
+        col = RED if urg == "critical" else (ST.n(0.45, 0.45, 0.48) if urg == "low" else self.accent)
         tw = w - 2 * 16 - 8
         summ = self.lay(cr, TAG.sub("", n.get("summary", "")), 14, True, tw - 70)
         body = self.lay(cr, TAG.sub("", n.get("body", "")), 12, False, tw)
@@ -224,22 +223,21 @@ class Center(Gtk.ApplicationWindow):
         self.card = (cx, self.top, cw, ch); self.hits = []
         cr.save(); cr.translate(off, 0)
         # корпус
-        self.rrect(cr, cx, self.top, cw, ch, 24); cr.set_source_rgba(0.03, 0.03, 0.035, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*self.accent, 0.55); cr.set_line_width(1.5); cr.stroke()
+        ST.frame(cr, cx, self.top, cw, ch, self.accent, 24, glow=False)
         hy = self.top + 36
         self.txt(cr, "󰂚", cx + PAD + 6, hy, 22, self.accent)
-        self.txt(cr, "NOTIFICATIONS", cx + PAD + 40, hy - 1, 13, (0.95, 0.95, 0.95))
-        self.txt(cr, f"{len(self.items)} в журнале" if self.items else "пусто", cx + PAD + 40, hy + 17, 10, (0.55, 0.55, 0.58), False)
+        self.txt(cr, "NOTIFICATIONS", cx + PAD + 40, hy - 1, 13, ST.n(0.95, 0.95, 0.95))
+        self.txt(cr, f"{len(self.items)} в журнале" if self.items else "пусто", cx + PAD + 40, hy + 17, 10, ST.n(0.55, 0.55, 0.58), False)
         rx = cx + cw - PAD
-        rx = self.chip(cr, rx, hy, "CLEAR", 12, RED, (0.12, 0.12, 0.14), "clear")
-        self.chip(cr, rx, hy, "󰂛 DND" if self.dnd else "󰂚 DND", 12, self.accent, (0.12, 0.12, 0.14), "dnd", None, self.dnd)
+        rx = self.chip(cr, rx, hy, "CLEAR", 12, RED, ST.n(0.12, 0.12, 0.14), "clear")
+        self.chip(cr, rx, hy, "󰂛 DND" if self.dnd else "󰂚 DND", 12, self.accent, ST.n(0.12, 0.12, 0.14), "dnd", None, self.dnd)
         # список
         ly0 = self.top + HEAD; lh = ch - HEAD - PAD
         cr.save(); cr.rectangle(cx, ly0, cw, lh); cr.clip()
         y = ly0 - self.scroll; total = 0
         if not self.items:
-            self.txt(cr, "󰂜", cx + cw / 2, ly0 + 120, 54, (0.28, 0.28, 0.3), True, "c")
-            self.txt(cr, "Нет новых уведомлений", cx + cw / 2, ly0 + 180, 14, (0.6, 0.6, 0.62), True, "c")
+            self.txt(cr, "󰂜", cx + cw / 2, ly0 + 120, 54, ST.n(0.28, 0.28, 0.3), True, "c")
+            self.txt(cr, "Нет новых уведомлений", cx + cw / 2, ly0 + 180, 14, ST.n(0.6, 0.6, 0.62), True, "c")
         for i, n in enumerate(self.items):
             h, col, summ, body, sh, bh, p, tw = self.draw_item(cr, n, cx + PAD, y, cw - 2 * PAD, now)
             slide_in = ease_out_back((t - 0.1 - 0.04 * min(i, 8)) / 0.35, 1.2) if t < 1.0 else 1.0
@@ -248,18 +246,18 @@ class Center(Gtk.ApplicationWindow):
             if y + h > ly0 - 4 and y < ly0 + lh + 4 and alpha > 0.01:
                 cr.push_group()
                 self.rrect(cr, ix - 3, y - 3, cw - 2 * PAD + 6, h + 6, 20); cr.set_source_rgb(0, 0, 0); cr.fill()
-                self.rrect(cr, ix, y, cw - 2 * PAD, h, 17); cr.set_source_rgb(0.15, 0.15, 0.17); cr.fill()
+                self.rrect(cr, ix, y, cw - 2 * PAD, h, 17); cr.set_source_rgb(*ST.n(0.15, 0.15, 0.17)); cr.fill()
                 cr.save(); self.rrect(cr, ix, y, cw - 2 * PAD, h, 17); cr.clip()
                 cr.rectangle(ix, y, 6, h); cr.set_source_rgb(*col); cr.fill(); cr.restore()
                 self.txt(cr, n.get("app", "?").upper(), ix + 20, y + 22, 10, (*col, 1))
-                self.txt(cr, ago(n["ts"]), ix + cw - 2 * PAD - 52, y + 22, 10, (0.55, 0.55, 0.58), False, "r")
+                self.txt(cr, ago(n["ts"]), ix + cw - 2 * PAD - 52, y + 22, 10, ST.n(0.55, 0.55, 0.58), False, "r")
                 dx = ix + cw - 2 * PAD - 34
                 hov = self.hover == ("del", (n["ts"], n["id"]))
-                self.rrect(cr, dx, y + 8, 22, 22, 11); cr.set_source_rgb(*((0.35, 0.12, 0.17) if hov else (0.1, 0.1, 0.11))); cr.fill()
-                self.txt(cr, "×", dx + 11, y + 18, 15, (*RED, 1) if hov else (0.7, 0.7, 0.72), True, "c")
-                cr.move_to(ix + 20, y + 38); cr.set_source_rgb(0.97, 0.97, 0.97); PangoCairo.show_layout(cr, summ)
+                self.rrect(cr, dx, y + 8, 22, 22, 11); cr.set_source_rgb(*((0.35, 0.12, 0.17) if hov else ST.n(0.1, 0.1, 0.11))); cr.fill()
+                self.txt(cr, "×", dx + 11, y + 18, 15, (*RED, 1) if hov else ST.n(0.7, 0.7, 0.72), True, "c")
+                cr.move_to(ix + 20, y + 38); cr.set_source_rgb(*ST.n(0.97, 0.97, 0.97)); PangoCairo.show_layout(cr, summ)
                 if bh:
-                    cr.move_to(ix + 20, y + 38 + sh + 6); cr.set_source_rgb(0.72, 0.73, 0.7); PangoCairo.show_layout(cr, body)
+                    cr.move_to(ix + 20, y + 38 + sh + 6); cr.set_source_rgb(*ST.n(0.72, 0.73, 0.7)); PangoCairo.show_layout(cr, body)
                 cr.pop_group_to_source(); cr.paint_with_alpha(alpha)
                 if p == 0.0 and not self.closing_at:
                     self.hits.append(("del", (dx, y + 8, 22, 22), (n["ts"], n["id"])))

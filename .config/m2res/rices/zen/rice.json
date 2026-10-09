@@ -1,0 +1,207 @@
+{
+ "extends": "m2res",
+ "order": 15,
+ "title": "Zen",
+ "icon": "󰇘",
+ "desc": "тишина: только текст, воркспейсы-точки, спокойный серый, тонкие линии",
+ "palette": {
+  "accent": "#d4d4d8",
+  "pill_bg": "rgba(15, 15, 17, 0.0)",
+  "pill_hover": "rgba(255, 255, 255, 0.08)",
+  "pill_fg": "#e4e4e7",
+  "pill_dim": "#8e8e96",
+  "pill_ink": "#0f0f11"
+ },
+ "widgets": {
+  "frame": "flat",
+  "shape": "round",
+  "rk": 0.55,
+  "border_w": 1,
+  "border_a": 0.22,
+  "bg": [
+   0.06,
+   0.06,
+   0.07,
+   0.94
+  ],
+  "fg": [
+   0.89,
+   0.89,
+   0.91
+  ],
+  "dim": [
+   0.52,
+   0.52,
+   0.56
+  ],
+  "ink": [
+   1,
+   1,
+   1
+  ],
+  "on_acc": [
+   0.06,
+   0.06,
+   0.07
+  ],
+  "font": "CaskaydiaMono Nerd Font Propo",
+  "tint": true
+ },
+ "bar": {
+  "height": 26,
+  "margin": [
+   6,
+   18,
+   0,
+   18
+  ],
+  "position": "top",
+  "spacing": 0,
+  "left": [
+   "clock"
+  ],
+  "center": [
+   "hyprland/workspaces"
+  ],
+  "right": [
+   "pulseaudio",
+   "tray",
+   "custom/profile",
+   "custom/rec",
+   "custom/notif",
+   "custom/timer",
+   "custom/rice",
+   "custom/control"
+  ],
+  "css": "bar.css"
+ },
+ "border": "solid",
+ "hypr": {
+  "gaps_in": 8,
+  "gaps_out": 22,
+  "border_size": 1,
+  "rounding": 10,
+  "rounding_power": 2,
+  "active_opacity": 0.97,
+  "inactive_opacity": 0.9,
+  "blur": {
+   "enabled": true,
+   "size": 4,
+   "passes": 2,
+   "new_optimizations": true,
+   "ignore_opacity": true,
+   "xray": true
+  },
+  "shadow": {
+   "enabled": false,
+   "range": 10,
+   "render_power": 2,
+   "color": "0x33000000"
+  },
+  "animations_enabled": true,
+  "anim": {
+   "global": [
+    5.0,
+    "default"
+   ],
+   "windows": [
+    4,
+    "zenEase"
+   ],
+   "windowsIn": [
+    3.4,
+    "zenEase",
+    "popin 94%"
+   ],
+   "windowsOut": [
+    2.4,
+    "zenEase",
+    "popin 94%"
+   ],
+   "fadeIn": [
+    1.73,
+    "almostLinear"
+   ],
+   "fadeOut": [
+    1.46,
+    "almostLinear"
+   ],
+   "border": [
+    3.0,
+    "easeOutQuint"
+   ],
+   "fade": [
+    2.8,
+    "quick"
+   ],
+   "layersIn": [
+    2.4,
+    "easeOutQuint",
+    "popin 87%"
+   ],
+   "layersOut": [
+    2.4,
+    "easeOutQuint",
+    "popin 87%"
+   ],
+   "fadeLayersIn": [
+    0.2,
+    "quick"
+   ],
+   "fadeLayersOut": [
+    1.8,
+    "easeOut"
+   ],
+   "workspaces": [
+    3,
+    "zenEase",
+    "slide"
+   ]
+  },
+  "curves": {
+   "zenEase": [
+    0.3,
+    0.9,
+    0.3,
+    1
+   ]
+  }
+ },
+ "mako": {
+  "width": 360,
+  "anchor": "top-right",
+  "outer-margin": "40,22,0,0",
+  "padding": "12,16,12,14",
+  "border-size": 1,
+  "border-radius": 12,
+  "background-color": "#0f0f11e6",
+  "text-color": "#e4e4e7",
+  "font": "CaskaydiaMono Nerd Font Propo 11",
+  "icon-border-radius": 8,
+  "body": "#a1a1aa",
+  "low": "#8e8e96",
+  "low_border": "#3f3f46",
+  "crit": "#f87171",
+  "crit_bg": "#1c0f0fe6",
+  "crit_body": "#fca5a5"
+ },
+ "lock": {
+  "font": "CaskaydiaMono Nerd Font Propo",
+  "bg": "0a0a0b",
+  "panel": "0f0f11cc",
+  "inner": "18181bf0",
+  "text": "rgba(e4e4e7ff)"
+ },
+ "ghostty": {},
+ "wall": "wall.jpg",
+ "dock": {
+  "SIDE": "left",
+  "AUTOHIDE": 1
+ },
+ "sound": {
+  "normal": "low-tick",
+  "critical": "crit-glass",
+  "low": "low-tick",
+  "volume": 0.45
+ }
+}

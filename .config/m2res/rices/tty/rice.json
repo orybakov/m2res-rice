@@ -1,0 +1,225 @@
+{
+ "extends": "m2res",
+ "order": 50,
+ "title": "TTY",
+ "icon": "󰆍",
+ "desc": "терминал: зелёный фосфор, двойные рамки, без скруглений и анимаций",
+ "palette": {
+  "accent": "#39ff7a",
+  "pill_bg": "rgba(0, 10, 3, 0.95)",
+  "pill_hover": "rgba(0, 48, 14, 1)",
+  "pill_fg": "#7dff9a",
+  "pill_dim": "#2f8f4a",
+  "pill_ink": "#001a08"
+ },
+ "widgets": {
+  "frame": "double",
+  "shape": "square",
+  "rk": 0,
+  "border_w": 1.5,
+  "border_a": 0.9,
+  "bg": [
+   0.0,
+   0.035,
+   0.012,
+   0.985
+  ],
+  "fg": [
+   0.49,
+   1.0,
+   0.6
+  ],
+  "dim": [
+   0.18,
+   0.55,
+   0.29
+  ],
+  "ink": [
+   0.3,
+   1,
+   0.45
+  ],
+  "on_acc": [
+   0,
+   0.07,
+   0.02
+  ],
+  "font": "Noto Sans Mono",
+  "tint": true
+ },
+ "bar": {
+  "height": 24,
+  "margin": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "position": "top",
+  "spacing": 0,
+  "left": [
+   "hyprland/workspaces",
+   "memory"
+  ],
+  "center": [
+   "clock"
+  ],
+  "right": [
+   "pulseaudio",
+   "custom/weather",
+   "hyprland/language",
+   "tray",
+   "custom/profile",
+   "custom/rec",
+   "custom/notif",
+   "custom/timer",
+   "custom/rice",
+   "custom/control"
+  ],
+  "css": "bar.css"
+ },
+ "border": "solid",
+ "hypr": {
+  "gaps_in": 0,
+  "gaps_out": 0,
+  "border_size": 1,
+  "rounding": 0,
+  "rounding_power": 2,
+  "active_opacity": 1.0,
+  "inactive_opacity": 0.92,
+  "blur": {
+   "enabled": false,
+   "size": 3,
+   "passes": 3,
+   "new_optimizations": true,
+   "ignore_opacity": true,
+   "xray": true
+  },
+  "shadow": {
+   "enabled": false,
+   "range": 10,
+   "render_power": 2,
+   "color": "0x33000000"
+  },
+  "animations_enabled": false,
+  "anim": {
+   "global": [
+    5.0,
+    "default"
+   ],
+   "windows": [
+    4.5,
+    "easeOutQuint"
+   ],
+   "windowsIn": [
+    2.8,
+    "easeOutQuint",
+    "popin 87%"
+   ],
+   "windowsOut": [
+    1.2,
+    "linear",
+    "popin 87%"
+   ],
+   "fadeIn": [
+    1.73,
+    "almostLinear"
+   ],
+   "fadeOut": [
+    1.46,
+    "almostLinear"
+   ],
+   "border": [
+    3.0,
+    "easeOutQuint"
+   ],
+   "fade": [
+    2.8,
+    "quick"
+   ],
+   "layersIn": [
+    2.4,
+    "easeOutQuint",
+    "popin 87%"
+   ],
+   "layersOut": [
+    2.4,
+    "easeOutQuint",
+    "popin 87%"
+   ],
+   "fadeLayersIn": [
+    0.2,
+    "quick"
+   ],
+   "fadeLayersOut": [
+    1.8,
+    "easeOut"
+   ],
+   "workspaces": [
+    2.0,
+    "easeOut",
+    "slide"
+   ]
+  }
+ },
+ "mako": {
+  "width": 420,
+  "anchor": "top-right",
+  "outer-margin": "28,12,0,0",
+  "padding": "10,14,10,12",
+  "border-size": 1,
+  "border-radius": 0,
+  "background-color": "#000a03f2",
+  "text-color": "#7dff9a",
+  "font": "Noto Sans Mono Bold 10",
+  "icon-border-radius": 0,
+  "body": "#4fc46c",
+  "low": "#2f8f4a",
+  "low_border": "#14502a",
+  "crit": "#ff5f5f",
+  "crit_bg": "#1a0000f2",
+  "crit_body": "#ff9a9a"
+ },
+ "lock": {
+  "font": "Noto Sans Mono",
+  "bg": "000000",
+  "panel": "000a03e6",
+  "inner": "00140af0",
+  "text": "rgba(7dff9aff)"
+ },
+ "ghostty": {
+  "background": "#000a03",
+  "foreground": "#7dff9a",
+  "opacity": 0.93,
+  "selection-foreground": "#001a08",
+  "palette": [
+   "#000a03",
+   "#ff5f5f",
+   "#39ff7a",
+   "#d7ff5f",
+   "#5fafff",
+   "#d787ff",
+   "#5fffd7",
+   "#b6ffc8",
+   "#2f8f4a",
+   "#ff8787",
+   "#7dff9a",
+   "#e6ff8a",
+   "#87c7ff",
+   "#e6a8ff",
+   "#8fffe6",
+   "#eafff0"
+  ]
+ },
+ "wall": "wall.jpg",
+ "dock": {
+  "SIDE": "left",
+  "AUTOHIDE": 1
+ },
+ "sound": {
+  "normal": "notify-data",
+  "critical": "critical-alarm",
+  "low": "low-tick",
+  "volume": 0.6
+ }
+}

@@ -1,0 +1,14 @@
+/* Brutal: жёсткие рамки и тени */
+window#waybar { background: transparent; border-top: 3px solid #0d0d0d; background-color: #fdf5d9; }
+{PILLS} {
+    border-radius: 0; border: 3px solid #0d0d0d; padding: 2px 12px; margin: 4px 5px 7px 3px;
+    box-shadow: 3px 3px 0 #0d0d0d; font-family: "Noto Sans Mono"; font-weight: 800; font-size: 13px;
+}
+#memory { border-left: 3px solid #0d0d0d; border-radius: 0; }
+#workspaces button { border-radius: 0; border: 3px solid #0d0d0d; background: @pill_bg; color: #0d0d0d; box-shadow: 3px 3px 0 #0d0d0d; font-family: "Noto Sans Mono"; font-weight: 900; margin: 4px 5px 7px 3px; min-width: 26px; transition: none; }
+#workspaces button label { font-family: "Noto Sans Mono"; font-weight: 900; font-size: 14px; }
+#workspaces button.active { background: @accent; color: #0d0d0d; min-width: 26px; }
+#workspaces button.active label { color: #0d0d0d; }
+{PILLS}:hover, #workspaces button:hover { background: #ffe27a; }
+tooltip { border-radius: 0; border: 3px solid #0d0d0d; background: #fdf5d9; }
+tooltip label { color: #0d0d0d; }

@@ -13,7 +13,9 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONT = "CaskaydiaMono Nerd Font Mono"
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
+FONT = ST.font
 RED, YEL = (1.0, 0.36, 0.48), (1.0, 0.82, 0.40)
 TW, TH, GAP, PAD, MARG = 200, 236, 16, 30, 40
 N = 5
@@ -150,9 +152,7 @@ class Power(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", alpha=1.0):
         lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} {'Bold ' if bold else ''}{size}"))
@@ -173,15 +173,12 @@ class Power(Gtk.ApplicationWindow):
     def panel(self, cr, now, t):
         A = self.acc
         x0, y0 = MARG, MARG
-        for i, a in ((18, 0.04), (12, 0.06), (6, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, x0 - i, y0 - i, PW + 2 * i, PH + 2 * i, 30 + i); cr.fill()
-        self.rr(cr, x0, y0, PW, PH, 30); cr.set_source_rgba(0.039, 0.039, 0.039, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.55); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, x0, y0, PW, PH, A, 30)
         # шапка
         self.text(cr, "SESSION", 26, A, x0 + PAD + 4, y0 + 44, bold=True)
-        self.text(cr, "выберите действие", 14, (0.55, 0.56, 0.52), x0 + PAD + 4, y0 + 74)
+        self.text(cr, "выберите действие", 14, ST.n(0.55, 0.56, 0.52), x0 + PAD + 4, y0 + 74)
         user = os.environ.get("USER", "")
-        self.text(cr, f"{user} @ {os.uname().nodename}", 14, (0.55, 0.56, 0.52), x0 + PW - PAD - 4, y0 + 44, anchor="r")
+        self.text(cr, f"{user} @ {os.uname().nodename}", 14, ST.n(0.55, 0.56, 0.52), x0 + PW - PAD - 4, y0 + 44, anchor="r")
         cr.set_source_rgba(*A, 0.30); cr.rectangle(x0 + PAD, y0 + 94, PW - 2 * PAD, 2); cr.fill()
         # рамка выбора (скользит)
         if self.hlx is not None:
@@ -196,7 +193,7 @@ class Power(Gtk.ApplicationWindow):
         # подвал
         sel = ACTIONS[self.sel]
         hint = "удерживайте Enter 0.8 с" if sel[4] else "Enter — сразу"
-        self.text(cr, f"←  →  выбор      {hint}      Esc — закрыть", 14, (0.50, 0.51, 0.47), x0 + PW / 2, y0 + PH - 30, anchor="c")
+        self.text(cr, f"←  →  выбор      {hint}      Esc — закрыть", 14, ST.n(0.50, 0.51, 0.47), x0 + PW / 2, y0 + PH - 30, anchor="c")
 
     def tile(self, cr, i, a, now, t):
         tx, ty, w, h = self.tile_rect(i)
@@ -217,15 +214,15 @@ class Power(Gtk.ApplicationWindow):
         cr.translate(shake, 0); cr.scale(k, k)
         al = d
         # значок
-        ic = (0.93, 0.93, 0.90) if not selected else tuple(min(1, v * 0.4 + 0.6) for v in c)
-        self.text(cr, a[2], 76, ic if selected else (0.82, 0.83, 0.78), 0, -34, anchor="c", alpha=al)
+        ic = ST.n(0.93, 0.93, 0.90) if not selected else tuple(min(1, v * 0.4 + 0.6) for v in c)
+        self.text(cr, a[2], 76, ic if selected else ST.n(0.82, 0.83, 0.78), 0, -34, anchor="c", alpha=al)
         # кольцо удержания вокруг значка
         if frac > 0:
             cr.set_line_width(7); cr.set_source_rgba(*c, 0.18 * al); cr.arc(0, -34, 60, 0, 2 * math.pi); cr.stroke()
             cr.set_source_rgba(*c, al); cr.set_line_cap(cairo.LINE_CAP_ROUND)
             cr.arc(0, -34, 60, -math.pi / 2, -math.pi / 2 + 2 * math.pi * frac); cr.stroke()
-        self.text(cr, a[1], 20, c if selected else (0.78, 0.79, 0.74), 0, 62, bold=True, anchor="c", alpha=al)
-        self.text(cr, f"{i + 1}  ·  {a[6]}", 13, (0.45, 0.46, 0.42), 0, 92, anchor="c", alpha=al * 0.9)
+        self.text(cr, a[1], 20, c if selected else ST.n(0.78, 0.79, 0.74), 0, 62, bold=True, anchor="c", alpha=al)
+        self.text(cr, f"{i + 1}  ·  {a[6]}", 13, ST.n(0.45, 0.46, 0.42), 0, 92, anchor="c", alpha=al * 0.9)
         if a[4]: self.text(cr, "HOLD", 11, c, 0, 108, bold=True, anchor="c", alpha=al * (0.9 if selected else 0.45))
         cr.restore()
         if self.fire_t and self.hold_i == i:                             # вспышка при срабатывании

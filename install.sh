@@ -92,10 +92,13 @@ listener {
 }
 IDLE
     echo "создан hypridle.conf (затемнение за 45 с, блокировка через 10 мин)"; }
+  # райсы: подключить include райса к Ghostty (если конфиг есть); дальше всё делает m2res-rice
+  GC="$HOME/.config/ghostty/config"
+  if [ -e "$GC" ] && ! grep -q "ghostty-rice.conf" "$GC"; then printf '\n# m2res: райс (фон, палитра терминала)\nconfig-file = ?"~/.config/m2res/ghostty-rice.conf"\n' >> "$GC"; echo "ghostty: подключён райс"; fi
   "$M2/scripts/m2res-enable"; [ -z "${M2_INSTALL_NORELOAD:-}" ] && command -v hyprctl >/dev/null && hyprctl reload >/dev/null 2>&1; fi
 if [ -z "${M2_INSTALL_NORELOAD:-}" ] && hyprctl monitors >/dev/null 2>&1; then say "проверка"; "$M2/scripts/m2res-doctor" 2>&1 | grep -E "WARN|FAIL|итого"; fi
 echo
-echo "Готово. Шпаргалка: SUPER+F1, профили: SUPER+CTRL+P, док: SUPER+SHIFT+B, README: $M2/README.md"
+echo "Готово. Шпаргалка: SUPER+F1, профили: SUPER+CTRL+P, док: SUPER+SHIFT+B, райсы: SUPER+ALT+R (m2res-rice list), README: $M2/README.md"
 echo "Войти: выберите Hyprland в менеджере входа или запустите Hyprland из консоли (лучше через uwsm)."
 echo "Откат: $M2/scripts/m2res-enable off  (и вернуть прежнее из pre-install-*.tar.gz)"
 exit 0

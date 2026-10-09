@@ -13,7 +13,9 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONT = "CaskaydiaMono Nerd Font Mono"
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
+FONT = ST.font
 SINK, SRC = "@DEFAULT_AUDIO_SINK@", "@DEFAULT_AUDIO_SOURCE@"
 NIGHT = os.path.expanduser("~/.config/m2res/nightlight.frag")      # старый статичный шейдер (больше не используется)
 NIGHTCMD = os.path.expanduser("~/.config/m2res/scripts/m2res-night")
@@ -22,7 +24,7 @@ GH = 84
 H2 = 88; NEWTILES = 4                                   # нижний ряд: BT · WIFI · VPN · SOUND
 HDR = 78; GRID_Y = HDR; SL_Y = GRID_Y + 2 * TH + GAP + GAP + GH + GAP + H2 + 30; PH = SL_Y + 2 * 84 + 62
 RIGHT, TOP = 28, 52
-DIM, TXT = (0.55, 0.56, 0.52), (0.92, 0.92, 0.88)
+DIM, TXT = ST.n(0.55, 0.56, 0.52), ST.n(0.92, 0.92, 0.88)
 T_OPEN, T_CLOSE = 0.30, 0.16
 GAME_ST = os.path.expanduser("~/.cache/m2res/game.json")
 GAME = os.path.expanduser("~/.config/m2res/scripts/m2res-game")
@@ -284,9 +286,7 @@ class Control(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rr(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def text(self, cr, s, size, color, x, y, bold=False, anchor="l", alpha=1.0):
         lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} {'Bold ' if bold else ''}{size}"))
@@ -315,15 +315,12 @@ class Control(Gtk.ApplicationWindow):
 
     def panel(self, cr, now, t):
         A = self.acc; ox, oy = self.origin(); s = self.st
-        for i, a in ((16, 0.04), (10, 0.06), (5, 0.09)):
-            cr.set_source_rgba(*A, a); self.rr(cr, ox - i, oy - i, PW + 2 * i, PH + 2 * i, 28 + i); cr.fill()
-        self.rr(cr, ox, oy, PW, PH, 28); cr.set_source_rgba(0.039, 0.039, 0.039, 0.97); cr.fill_preserve()
-        cr.set_source_rgba(*A, 0.55); cr.set_line_width(2.5); cr.stroke()
+        ST.frame(cr, ox, oy, PW, PH, A, 28)
         up = 0
         try: up = float(open("/proc/uptime").read().split()[0])
         except Exception: pass
         self.text(cr, "CONTROL", 24, A, ox + PAD + 2, oy + 38, bold=True)
-        self.text(cr, f"{os.uname().nodename}  ·  up {int(up // 3600)}ч {int(up % 3600 // 60)}м", 14, DIM, ox + PW - PAD - 2, oy + 38, anchor="r")
+        self.text(cr, f"{os.environ.get("M2_HOST") or os.uname().nodename}  ·  up {int(up // 3600)}ч {int(up % 3600 // 60)}м", 14, DIM, ox + PW - PAD - 2, oy + 38, anchor="r")
         cr.set_source_rgba(*A, 0.28); cr.rectangle(ox + PAD, oy + 60, PW - 2 * PAD, 2); cr.fill()
         names = [("DND", "\U000f009b", s.dnd, "не беспокоить" if s.dnd else "уведомления"),
                  ("CAFFEINE", "\U000f0176", s.caf, "не гасить экран" if s.caf else "автоблокировка"),
@@ -346,11 +343,11 @@ class Control(Gtk.ApplicationWindow):
             val = self.sh[key]; bx, by, bw, bh = sx, sy + 38, sw - 70, 20
             self.rr(cr, bx, by, bw, bh, 10); cr.set_source_rgba(1, 1, 1, 0.08 * a); cr.fill()
             fw = max(bh, bw * val)
-            col = (0.45, 0.46, 0.42) if muted else A
+            col = ST.n(0.45, 0.46, 0.42) if muted else A
             self.rr(cr, bx, by, fw, bh, 10); cr.set_source_rgba(*col, a); cr.fill()
             cr.set_source_rgba(0.95, 0.95, 0.9, a); cr.arc(bx + fw - 10, by + 10, 6, 0, 7); cr.fill()
             self.text(cr, f"{int(round(val * 100))}%", 18, TXT if not muted else DIM, sx + sw, by + 10, bold=True, anchor="r", alpha=a)
-        self.text(cr, "клик · 1–9 · колесо по ползунку · Esc", 13, (0.45, 0.46, 0.42), ox + PW / 2, oy + PH - 24, anchor="c")
+        self.text(cr, "клик · 1–9 · колесо по ползунку · Esc", 13, ST.n(0.45, 0.46, 0.42), ox + PW / 2, oy + PH - 24, anchor="c")
 
     def tile(self, cr, i, nm, ic, on, sub, now, t):
         A = self.acc; x, y, w, h = self.tile_rect(i)
@@ -367,7 +364,7 @@ class Control(Gtk.ApplicationWindow):
             self.rr(cr, 0, 0, w, h, 22); cr.set_source_rgba(*A, 0.95 * a); cr.fill(); fg = (0.10, 0.13, 0.0); sub_c = (0.20, 0.26, 0.0)
         else:
             self.rr(cr, 0, 0, w, h, 22); cr.set_source_rgba(1, 1, 1, 0.055 * a); cr.fill_preserve(); cr.set_source_rgba(*A, 0.22 * a); cr.set_line_width(1.5); cr.stroke()
-            fg = (0.85, 0.86, 0.80); sub_c = DIM
+            fg = ST.n(0.85, 0.86, 0.80); sub_c = DIM
         if w > TW * 2:                                   # широкая плитка: иконка слева, текст справа
             self.text(cr, ic, 38, fg, 24, h / 2, alpha=a)
             self.text(cr, nm, 17, fg, 84, h / 2 - 13, bold=True, alpha=a)

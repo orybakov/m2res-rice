@@ -1,0 +1,80 @@
+{
+ "extends": "m2res",
+ "order": 60,
+ "title": "Osaka Jade",
+ "icon": "󰏘",
+ "desc": "палитра темы osaka-jade на скелете m2res",
+ "palette": {
+  "accent": "#e1b55e",
+  "pill_bg": "rgba(17, 34, 28, 0.92)",
+  "pill_hover": "rgba(43, 56, 47, 0.96)",
+  "pill_fg": "#e6d8ba",
+  "pill_dim": "#918f7b",
+  "pill_ink": "#101010"
+ },
+ "widgets": {
+  "bg": [
+   0.067,
+   0.133,
+   0.11,
+   0.97
+  ],
+  "fg": [
+   0.902,
+   0.847,
+   0.729
+  ],
+  "dim": [
+   0.569,
+   0.561,
+   0.482
+  ],
+  "ink": [
+   1,
+   1,
+   1
+  ],
+  "on_acc": [
+   0.063,
+   0.063,
+   0.063
+  ],
+  "tint": true,
+  "frame": "glow"
+ },
+ "mako": {
+  "background-color": "#11221Cee",
+  "text-color": "#e6d8ba",
+  "body": "#918f7b",
+  "low": "#918f7b"
+ },
+ "lock": {
+  "bg": "11221C",
+  "panel": "11221Cd9",
+  "inner": "11221Cf2",
+  "text": "#e6d8ba"
+ },
+ "ghostty": {
+  "background": "#11221C",
+  "foreground": "#e6d8ba",
+  "palette": [
+   "#23372B",
+   "#FF5345",
+   "#549e6a",
+   "#459451",
+   "#509475",
+   "#D2689C",
+   "#2DD5B7",
+   "#F6F5DD",
+   "#53685B",
+   "#db9f9c",
+   "#63b07a",
+   "#E5C736",
+   "#ACD4CF",
+   "#75bbb3",
+   "#8CD3CB",
+   "#9eebb3"
+  ]
+ },
+ "wall": "wall.jpg"
+}

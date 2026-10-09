@@ -1,0 +1,80 @@
+{
+ "extends": "m2res",
+ "order": 60,
+ "title": "Catppuccin",
+ "icon": "󰏘",
+ "desc": "палитра темы catppuccin на скелете m2res",
+ "palette": {
+  "accent": "#8caaee",
+  "pill_bg": "rgba(24, 24, 36, 0.92)",
+  "pill_hover": "rgba(45, 46, 61, 0.96)",
+  "pill_fg": "#cad3f5",
+  "pill_dim": "#8388a1",
+  "pill_ink": "#101010"
+ },
+ "widgets": {
+  "bg": [
+   0.094,
+   0.094,
+   0.141,
+   0.97
+  ],
+  "fg": [
+   0.792,
+   0.827,
+   0.961
+  ],
+  "dim": [
+   0.514,
+   0.533,
+   0.631
+  ],
+  "ink": [
+   1,
+   1,
+   1
+  ],
+  "on_acc": [
+   0.063,
+   0.063,
+   0.063
+  ],
+  "tint": true,
+  "frame": "glow"
+ },
+ "mako": {
+  "background-color": "#181824ee",
+  "text-color": "#cad3f5",
+  "body": "#8388a1",
+  "low": "#8388a1"
+ },
+ "lock": {
+  "bg": "181824",
+  "panel": "181824d9",
+  "inner": "181824f2",
+  "text": "#cad3f5"
+ },
+ "ghostty": {
+  "background": "#181824",
+  "foreground": "#cad3f5",
+  "palette": [
+   "#494d64",
+   "#ed8796",
+   "#a6da95",
+   "#eed49f",
+   "#8aadf4",
+   "#f5bde6",
+   "#8bd5ca",
+   "#a5adcb",
+   "#5b6078",
+   "#ec7486",
+   "#8ccf7f",
+   "#e1c682",
+   "#78a1f6",
+   "#f2a9dd",
+   "#63cbc0",
+   "#b8c0e0"
+  ]
+ },
+ "wall": "wall.jpg"
+}

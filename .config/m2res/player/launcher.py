@@ -15,8 +15,10 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Gio, GdkPixbuf, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from style import ST  # noqa: E402
 USAGE = os.path.expanduser("~/.local/share/m2res/launcher-usage.json")
-FONT = "CaskaydiaMono Nerd Font Mono"
+FONT = ST.font
 COLS, ROWS = 6, 3
 TILE_W, TILE_H, GAP = 180, 150, 12
 PAD = 22
@@ -529,9 +531,7 @@ class Launcher(Gtk.ApplicationWindow):
 
     # ---------- рисование ----------
     def rrect(self, cr, x, y, w, h, r):
-        r = min(r, w / 2, h / 2); cr.new_sub_path()
-        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0); cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi); cr.arc(x + r, y + r, r, math.pi, 1.5 * math.pi); cr.close_path()
+        ST.path(cr, x, y, w, h, r)
 
     def lay(self, cr, s, size, bold=True, width=None, align=Pango.Alignment.LEFT):
         l = PangoCairo.create_layout(cr)
@@ -571,7 +571,7 @@ class Launcher(Gtk.ApplicationWindow):
         cr.translate(cx, cy + (1 - min(ap, 1.0)) * 16); cr.scale(0.86 + 0.14 * min(ap, 1.0), 0.86 + 0.14 * min(ap, 1.0)); cr.translate(-cx, -cy)
         # плитка
         self.rrect(cr, x, y, TILE_W, TILE_H, 18)
-        cr.set_source_rgba(0.075, 0.078, 0.07, 1) if not selected else cr.set_source_rgba(0.11, 0.12, 0.085, 1)
+        cr.set_source_rgba(*ST.n(0.075, 0.078, 0.07, 1)) if not selected else cr.set_source_rgba(*ST.n(0.11, 0.12, 0.085, 1))
         cr.fill()
         kind, v = item
         a_ = min(1.0, ap)
@@ -585,10 +585,10 @@ class Launcher(Gtk.ApplicationWindow):
                 cr.save(); cr.translate(ix, iy); cr.scale(sc, sc); self.rrect(cr, -30, -30, 60, 60, 16)
                 cr.set_source_rgba(*self.acc, 0.18 * a_); cr.fill()
                 self.txt(cr, v.name[:1].upper(), 0, 0, 30, (*self.acc, a_), True, "c", 60); cr.restore()
-            nm = (0.97, 0.97, 0.95, a_) if selected else (0.85, 0.85, 0.82, a_)
+            nm = ST.n(0.97, 0.97, 0.95, a_) if selected else ST.n(0.85, 0.85, 0.82, a_)
             self.txt(cr, v.name, cx, y + TILE_H - 40, 14, nm, True, "c", TILE_W - 20)
             sub = v.generic or v.exe
-            if sub: self.txt(cr, sub, cx, y + TILE_H - 20, 11, (0.5, 0.52, 0.47, a_ * (1 if selected else 0.8)), False, "c", TILE_W - 20)
+            if sub: self.txt(cr, sub, cx, y + TILE_H - 20, 11, ST.n(0.5, 0.52, 0.47, a_ * (1 if selected else 0.8)), False, "c", TILE_W - 20)
             if v.id in self.usage and selected:                       # метка частоты
                 n = self.usage[v.id][0]
                 self.txt(cr, f"×{n}", x + TILE_W - 12, y + 16, 10, (*self.acc, a_), True, "r")
@@ -603,16 +603,14 @@ class Launcher(Gtk.ApplicationWindow):
             elif kind == "act": glyph, title, sub = "󰜎", v[2], v[0].name
             else: glyph, title, sub = "󰍉", v[0], v[1]
             self.txt(cr, glyph, cx, y + 56, big, (*self.acc, a_) if kind != "emoji" else (1, 1, 1, a_), True, "c", 80)
-            self.txt(cr, title, cx, y + TILE_H - 40, 15 if kind == "calc" else 14, (0.97, 0.97, 0.95, a_), True, "c", TILE_W - 16)
-            self.txt(cr, sub or ("shell" if kind == "cmd" else "введите выражение"), cx, y + TILE_H - 20, 11, (0.55, 0.57, 0.5, a_), False, "c", TILE_W - 16)
+            self.txt(cr, title, cx, y + TILE_H - 40, 15 if kind == "calc" else 14, ST.n(0.97, 0.97, 0.95, a_), True, "c", TILE_W - 16)
+            self.txt(cr, sub or ("shell" if kind == "cmd" else "введите выражение"), cx, y + TILE_H - 20, 11, ST.n(0.55, 0.57, 0.5, a_), False, "c", TILE_W - 16)
         cr.restore()
 
     def draw_panel(self, cr, now, t):
         acc = self.acc
         # корпус
-        self.rrect(cr, 0, 0, PW, PH, 28)
-        cr.set_source_rgba(0.035, 0.036, 0.034, 1.0); cr.fill_preserve()
-        cr.set_source_rgba(*acc, 0.55); cr.set_line_width(2); cr.stroke()
+        ST.frame(cr, 0, 0, PW, PH, acc, 28, glow=False)
         # уголки-скобки
         cr.set_source_rgba(*acc, 0.9); cr.set_line_width(3)
         for sx, sy in ((14, 14), (PW - 14, 14), (14, PH - 14), (PW - 14, PH - 14)):
@@ -621,32 +619,32 @@ class Launcher(Gtk.ApplicationWindow):
         # строка поиска
         sx, sy, sw, sh = PAD, 24, PW - 2 * PAD, 62
         self.rrect(cr, sx - 3, sy - 3, sw + 6, sh + 6, 24); cr.set_source_rgb(0, 0, 0); cr.fill()
-        self.rrect(cr, sx, sy, sw, sh, 21); cr.set_source_rgba(0.115, 0.118, 0.11, 1); cr.fill()
+        self.rrect(cr, sx, sy, sw, sh, 21); cr.set_source_rgba(*ST.n(0.115, 0.118, 0.11, 1)); cr.fill()
         cr.save(); self.rrect(cr, sx, sy, sw, sh, 21); cr.clip()                 # линия-«сканер» при открытии
         p = ease_out_cubic(t / 0.55); cr.rectangle(sx, sy + sh - 3, sw * p, 3); cr.set_source_rgba(*acc, 0.9 * (1 - p * 0.55)); cr.fill()
         cr.restore()
         self.txt(cr, "󰍉", sx + 30, sy + sh / 2, 26, (*acc, 1), True, "c", 40)
         qy = sy + sh / 2
         if self.query:
-            w = self.txt(cr, self.query, sx + 62, qy, 26, (0.96, 0.96, 0.94, 1), True)
+            w = self.txt(cr, self.query, sx + 62, qy, 26, ST.n(0.96, 0.96, 0.94, 1), True)
         else:
-            w = 0; self.txt(cr, "Поиск…  > команда  = счёт  : эмодзи  w окна  f файлы  g веб", sx + 62, qy, 21, (0.42, 0.43, 0.4, 1), False)
+            w = 0; self.txt(cr, "Поиск…  > команда  = счёт  : эмодзи  w окна  f файлы  g веб", sx + 62, qy, 21, ST.n(0.42, 0.43, 0.4, 1), False)
         if int((now - self.caret_t) * 2) % 2 == 0:
             cr.rectangle(sx + 62 + w + 3, qy - 15, 3, 30); cr.set_source_rgba(*acc, 1); cr.fill()
         cnt = sum(1 for k, _ in self.results if k == "app")
-        self.chip(cr, sx + sw - 20 - (len(f"{cnt}/{len(self.apps)}") * 9 + 26), qy, f"{cnt}/{len(self.apps)}", 13, (0.7, 0.72, 0.66, 1), (0.05, 0.05, 0.05, 1), 28)
+        self.chip(cr, sx + sw - 20 - (len(f"{cnt}/{len(self.apps)}") * 9 + 26), qy, f"{cnt}/{len(self.apps)}", 13, ST.n(0.7, 0.72, 0.66, 1), (*ST.on_acc, 1), 28)
         # категории
         cx = PAD
         for i, (lab, _) in enumerate(CATS):
             on = i == self.cat
-            cw = self.chip(cr, cx, 116, lab, 13, (0.05, 0.06, 0.0, 1) if on else (0.62, 0.64, 0.58, 1),
-                           (*acc, 1) if on else (0.11, 0.115, 0.105, 1), 28, 14)
+            cw = self.chip(cr, cx, 116, lab, 13, ST.n(0.05, 0.06, 0.0, 1) if on else (0.62, 0.64, 0.58, 1),
+                           (*acc, 1) if on else ST.n(0.11, 0.115, 0.105, 1), 28, 14)
             cx += cw + 8
         # сетка (клип по области, чтобы прокрутка не вылезала)
         cr.save(); cr.rectangle(PAD - 6, GRID_Y - 6, PW - 2 * PAD + 12, ROWS * TILE_H + (ROWS - 1) * GAP + 12); cr.clip()
         if not self.results:
-            self.txt(cr, "Ничего не найдено", PW / 2, GRID_Y + 110, 22, (0.5, 0.52, 0.47, 1), True, "c", 600)
-            self.txt(cr, "Esc — закрыть · Ctrl+U — очистить запрос", PW / 2, GRID_Y + 150, 13, (0.4, 0.42, 0.38, 1), False, "c", 600)
+            self.txt(cr, "Ничего не найдено", PW / 2, GRID_Y + 110, 22, ST.n(0.5, 0.52, 0.47, 1), True, "c", 600)
+            self.txt(cr, "Esc — закрыть · Ctrl+U — очистить запрос", PW / 2, GRID_Y + 150, 13, ST.n(0.4, 0.42, 0.38, 1), False, "c", 600)
         else:
             # скользящая рамка выделения
             tx, ty = self.tile_geom(self.sel)
@@ -670,12 +668,12 @@ class Launcher(Gtk.ApplicationWindow):
         if self.results:
             k0, v0 = self.results[self.sel]
             d = (v0.desc if k0 == "app" else short_path(v0) if k0 == "file" else v0["title"] if k0 == "win" else v0[2] if k0 == "web" else "")
-            if d: self.txt(cr, d, PAD + 4, fy, 13, (0.6, 0.62, 0.56, 1), False, "l", 560)
+            if d: self.txt(cr, d, PAD + 4, fy, 13, ST.n(0.6, 0.62, 0.56, 1), False, "l", 560)
         hx = PW - PAD
         for lab, key in reversed((("↑↓←→", "выбор"), ("↵", "запуск"), ("⇥", "категория"), ("esc", "закрыть"))):
             lw = self.lay(cr, lab, 12).get_pixel_size()[0] + 16; kw = self.lay(cr, key, 12, False).get_pixel_size()[0]
-            hx -= kw; self.txt(cr, key, hx, fy, 12, (0.5, 0.52, 0.47, 1), False); hx -= lw + 6
-            self.chip(cr, hx, fy, lab, 12, (*acc, 1), (0.05, 0.05, 0.05, 1), 22, 8); hx -= 20
+            hx -= kw; self.txt(cr, key, hx, fy, 12, ST.n(0.5, 0.52, 0.47, 1), False); hx -= lw + 6
+            self.chip(cr, hx, fy, lab, 12, (*acc, 1), (*ST.on_acc, 1), 22, 8); hx -= 20
 
     def draw(self, _a, cr, w, h):
         if self.t0 is None: return

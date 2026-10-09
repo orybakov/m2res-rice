@@ -83,6 +83,8 @@ off(){
   local j walls; j=$(cat "$ST")
   g(){ echo "$j" | jq -r ".$1"; }
   hl "hl.config({ animations = { enabled = $(g anim) }, decoration = { rounding = $(g rounding), blur = { enabled = $(g blur) }, shadow = { enabled = $(g shadow) } }, general = { gaps_in = $(g gaps_in), gaps_out = $(g gaps_out) } })"
+  # райс мог смениться во время игры — вернуть геометрию/анимации текущего райса, а не сохранённые до игры
+  [ -x "$M2/scripts/m2res-rice" ] && "$M2/scripts/m2res-rice" hypr >/dev/null 2>&1
   [ "$(g dnd)" = 1 ] || makoctl mode -r do-not-disturb >/dev/null 2>&1
   [ "$(g idle)" = 1 ] && systemctl --user start hypridle 2>/dev/null
   powerprofilesctl set "$(g prof)" 2>/dev/null

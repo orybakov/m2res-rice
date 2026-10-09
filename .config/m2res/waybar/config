@@ -23,6 +23,7 @@
         "custom/notif",
         "custom/timer",
         "clock",
+        "custom/rice",
         "custom/control"
     ],
     "memory": {
@@ -121,5 +122,15 @@
         "tooltip": false,
         "on-click": "~/.config/m2res/scripts/m2res-center toggle",
         "on-click-right": "makoctl mode -t do-not-disturb; pkill -RTMIN+9 -x waybar"
-    }
+    },
+    "custom/rice": {
+        "exec": "~/.config/m2res/scripts/m2res-rice json",
+        "return-type": "json",
+        "interval": 60,
+        "signal": 12,
+        "tooltip": true,
+        "on-click": "~/.config/m2res/scripts/m2res-rice pick",
+        "on-click-right": "~/.config/m2res/scripts/m2res-rice next"
+    },
+    "margin-bottom": 0
 }

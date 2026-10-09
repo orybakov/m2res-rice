@@ -1,0 +1,750 @@
+#!/usr/bin/env python3
+"""m2res-rice — переключатель райсов. Райс = папка ~/.config/m2res/rices/<имя>/rice.json (+ bar.css, wall.jpg).
+Один райс меняет ВСЁ сразу: палитру и акцент, обои, Waybar (раскладка/размеры/CSS), геометрию и анимации Hyprland,
+вид и форму виджетов (панели, лаунчер, центр управления, плеер, док…), уведомления mako, экран блокировки, Ghostty, док, звуки.
+
+  m2res-rice list                  список райсов (● — текущий)
+  m2res-rice status                что сейчас применено и что изменено руками
+  m2res-rice apply NAME [--keep-accent] [--no-wall]   применить райс
+  m2res-rice preview NAME [сек]    применить на время (по умолчанию 12 с) — потом сам вернёт прежний, если не сказать keep
+  m2res-rice keep                  оставить райс, применённый через preview
+  m2res-rice revert                сразу вернуть прежний (отмена preview)
+  m2res-rice back                  вернуться к прежнему райсу
+  m2res-rice next | prev           следующий / предыдущий (SUPER+ALT+R — выбор карточками)
+  m2res-rice pick                  окно-переключатель с живым предпросмотром
+  m2res-rice shoot [NAME|all]      снять превью (rices/NAME/preview.jpg) — для карточек и README
+  m2res-rice new NAME [--from X]   завести свой райс (копия X, по умолчанию текущий)
+  m2res-rice pack NAME [файл]      упаковать райс в .m2rice (tar.gz) — поделиться
+  m2res-rice install ПУТЬ|URL      поставить райс из .m2rice, папки или git-репозитория
+  m2res-rice import-themes [ДИР]   превратить темы из ~/.local/share/dotfiles/themes в райсы theme-*
+  m2res-rice json                  для Waybar (бейдж)
+  m2res-rice regen                 пересобрать waybar/mako/lock/ghostty/виджеты из текущего райса (после правки rice.json)
+  m2res-rice validate [NAME]       проверить rice.json
+
+Waybar собирается из waybar/config.base + waybar/style.base.css + райса — правьте *.base, а не waybar/config и style.css.
+Откат: m2res-rice back; сломанный райс — m2res-rice apply m2res. Состояние: rice.current, ~/.cache/m2res/rice*.json."""
+import copy, json, os, re, shutil, subprocess, sys, tarfile, tempfile, time
+
+H = os.path.expanduser("~"); M2 = f"{H}/.config/m2res"; RICES = f"{M2}/rices"
+CACHE = f"{H}/.cache/m2res"; STATE = f"{M2}/rice.current"; PREVF = f"{CACHE}/rice-prev.json"; PVF = f"{CACHE}/rice-preview.json"
+S = f"{M2}/scripts"
+os.makedirs(CACHE, exist_ok=True)
+
+
+def sh(*a, t=15, inp=None):
+    try: return subprocess.run(a, capture_output=True, text=True, timeout=t, input=inp)
+    except Exception as e: return subprocess.CompletedProcess(a, 1, "", str(e))
+
+
+def bg(*a):
+    try: subprocess.Popen(a, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except Exception: pass
+
+
+import signal; signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+def say(m): print(m, flush=True)
+
+
+def deep(a, b):
+    """b поверх a (словари — рекурсивно, остальное — заменой)"""
+    r = copy.deepcopy(a)
+    for k, v in b.items():
+        r[k] = deep(r[k], v) if isinstance(v, dict) and isinstance(r.get(k), dict) else copy.deepcopy(v)
+    return r
+
+
+def names():
+    out = []
+    if os.path.isdir(RICES):
+        for n in sorted(os.listdir(RICES)):
+            if os.path.isfile(f"{RICES}/{n}/rice.json"): out.append(n)
+    # m2res — всегда первым, остальные по порядку order/имени
+    def key(n):
+        try: o = json.load(open(f"{RICES}/{n}/rice.json")).get("order", 50)
+        except Exception: o = 99
+        return (o, n)
+    return sorted(out, key=key)
+
+
+def current():
+    try: return open(STATE).read().strip()
+    except Exception: return ""
+
+
+def load(name, _seen=()):
+    p = f"{RICES}/{name}/rice.json"
+    if not os.path.isfile(p): raise SystemExit(f"нет райса «{name}» (m2res-rice list)")
+    r = json.load(open(p))
+    base = r.get("extends")
+    if base and base not in _seen and base != name:
+        r = deep(load(base, _seen + (name,)), {k: v for k, v in r.items() if k != "extends"})
+        r["extends"] = base
+    r["_dir"] = f"{RICES}/{name}"; r["_name"] = name
+    r["_dirs"] = [f"{RICES}/{name}"] + (load(base, _seen + (name,))["_dirs"] if base and base not in _seen and base != name else [])
+    return r
+
+
+def find_file(r, rel):
+    for d in r.get("_dirs", [r["_dir"]]):
+        if os.path.isfile(f"{d}/{rel}"): return f"{d}/{rel}"
+    return None
+
+
+# ───────────────────────── цвет ─────────────────────────
+def hex_rgb(h):
+    h = h.lstrip("#"); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def lum(rgb): return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255
+
+
+def acc_now():
+    try: return json.load(open(f"{M2}/player/colors.json"))["accent"].lower()
+    except Exception: return "#b0d500"
+
+
+def sub_acc(s, acc): return s.replace("{accent}", acc.lstrip("#")).replace("{ACCENT}", acc)
+
+
+# ───────────────────────── слои ─────────────────────────
+def mon():
+    try:
+        ms = json.loads(sh("hyprctl", "-j", "monitors").stdout)
+        m = next((x for x in ms if x.get("focused")), ms[0])
+        return m["name"], int(m["width"] / m["scale"]), int(m["height"] / m["scale"])
+    except Exception: return "", 1920, 1080
+
+
+def layer_widgets(r):
+    d = dict(r.get("widgets", {})); d["name"] = r["_name"]; d["border"] = r.get("border", "gradient")
+    p = f"{M2}/player/style.json"; tmp = p + ".tmp"
+    json.dump(d, open(tmp, "w"), indent=1); os.replace(tmp, p)
+
+
+def layer_bar(r):
+    bar = r.get("bar", {}); pal = r.get("palette", {}); acc = acc_now()
+    cfg = json.load(open(f"{M2}/waybar/config.base"))
+    for k in ("height", "spacing", "layer", "position", "exclusive", "passthrough"):
+        if k in bar: cfg[k] = bar[k]
+    if "margin" in bar:
+        t, rr, b, l = bar["margin"]
+        for k, v in (("margin-top", t), ("margin-right", rr), ("margin-bottom", b), ("margin-left", l)): cfg[k] = v
+    if bar.get("island"):                       # доля ширины монитора: панель-«остров» по центру (но не уже ~1500 px)
+        _, w, _ = mon(); bw = max(w * float(bar["island"]), min(w - 20, 1500)); side = int((w - bw) / 2)
+        cfg["margin-left"] = cfg["margin-right"] = side
+    if cfg.get("position") == "bottom" and "margin-top" in cfg and "margin-bottom" not in cfg:
+        cfg["margin-bottom"] = cfg.pop("margin-top")
+    if cfg.get("position") == "bottom": cfg.pop("margin-top", None)
+    have = set(cfg) | {m for k in cfg if k.startswith("modules-") for m in cfg[k]}
+    listed = set()
+    for side in ("left", "center", "right"):
+        if side in bar:
+            cfg[f"modules-{side}"] = [m for m in bar[side] if m in cfg]; listed |= set(bar[side])
+    # модули, которых райс не упомянул (напр. индикаторы локальных сервисов), остаются там, где были в базе
+    base = json.load(open(f"{M2}/waybar/config.base"))
+    for side in ("left", "center", "right"):
+        extra = [m for m in base.get(f"modules-{side}", []) if m not in listed and m not in cfg[f"modules-{side}"]]
+        if extra: cfg[f"modules-{side}"] = (extra + cfg[f"modules-{side}"]) if side == "right" else (cfg[f"modules-{side}"] + extra)
+    for k, v in bar.get("modules", {}).items():  # точечные правки модулей (формат, интервал…)
+        cfg.setdefault(k, {}); cfg[k].update(v) if isinstance(cfg[k], dict) else cfg.__setitem__(k, v)
+    out = json.dumps(cfg, ensure_ascii=False, indent=4) + "\n"
+    open(f"{M2}/waybar/config.tmp", "w").write(out); os.replace(f"{M2}/waybar/config.tmp", f"{M2}/waybar/config")
+    # стиль
+    P = {"pill_bg": "rgba(8, 8, 8, 0.92)", "pill_hover": "rgba(30, 30, 30, 0.96)", "pill_fg": "#e8e8e8", "pill_dim": "#bdbdbd", "pill_ink": "#0a0a0a"}
+    P.update({k: v for k, v in pal.items() if k.startswith("pill_")})
+    defs = "".join(f"@define-color {k} {v};\n" for k, v in P.items())
+    base_css = open(f"{M2}/waybar/style.base.css").read()
+    extra_css = ""
+    cf = bar.get("css")
+    if cf and find_file(r, cf): extra_css = open(find_file(r, cf)).read()
+    ids = []
+    for side in ("left", "center", "right"):
+        for m_ in cfg.get(f"modules-{side}", []):
+            if m_ == "hyprland/workspaces": continue
+            ids.append("#language" if m_ == "hyprland/language" else "#" + m_.replace("/", "-"))
+    extra_css = extra_css.replace("{PILLS}", ", ".join(ids))
+    css = f'@import url("colors.css");\n{defs}\n{base_css}\n/* ── райс: {r["_name"]} ── */\n{sub_acc(extra_css, acc)}\n'
+    open(f"{M2}/waybar/style.tmp", "w").write(css); os.replace(f"{M2}/waybar/style.tmp", f"{M2}/waybar/style.css")
+    sh(f"{S}/m2res-bar", "reload", t=20)
+
+
+def lua_val(v):
+    if isinstance(v, bool): return "true" if v else "false"
+    if isinstance(v, (int, float)): return repr(v)
+    if isinstance(v, str):
+        return v if re.fullmatch(r"0x[0-9a-fA-F]+", v) else json.dumps(v)
+    if isinstance(v, list): return "{ " + ", ".join(lua_val(x) for x in v) + " }"
+    if isinstance(v, dict): return "{ " + ", ".join(f"{k} = {lua_val(x)}" for k, x in v.items()) + " }"
+    return "nil"
+
+
+def game_on():
+    try: return sh(f"{S}/m2res-game", "status").stdout.strip().startswith("on")
+    except Exception: return False
+
+
+def layer_hypr(r, force=False):
+    h = r.get("hypr", {}); acc = acc_now().lstrip("#")
+    L = ["-- сгенерировано m2res-rice (" + r["_name"] + ") — не править: правьте rices/" + r["_name"] + "/rice.json", f'M2_ACCENT = "{acc}"']
+    gen = {k: h[k] for k in ("gaps_in", "gaps_out", "border_size", "resize_on_border") if k in h}
+    dec = {k: h[k] for k in ("rounding", "rounding_power", "active_opacity", "inactive_opacity", "dim_inactive", "dim_strength") if k in h}
+    if "blur" in h: dec["blur"] = h["blur"]
+    if "shadow" in h:
+        sd = dict(h["shadow"])
+        if isinstance(sd.get("color"), str) and "{accent}" in sd["color"]: sd["color"] = sub_acc(sd["color"], acc)
+        dec["shadow"] = sd
+    cfg = {}
+    if gen: cfg["general"] = gen
+    if dec: cfg["decoration"] = dec
+    if "animations_enabled" in h: cfg["animations"] = {"enabled": h["animations_enabled"]}
+    if "misc" in h: cfg["misc"] = h["misc"]
+    if cfg: L.append("hl.config(" + lua_val(cfg) + ")")
+    for n, p in h.get("curves", {}).items():
+        L.append(f'hl.curve("{n}", {{ type = "bezier", points = {{ {{{p[0]}, {p[1]}}}, {{{p[2]}, {p[3]}}} }} }})')
+    for leaf, a in h.get("anim", {}).items():
+        if a is False: L.append(f'hl.animation({{ leaf = "{leaf}", enabled = false }})'); continue
+        spd, bez = a[0], a[1]; sty = a[2] if len(a) > 2 else None
+        L.append(f'hl.animation({{ leaf = "{leaf}", enabled = true, speed = {spd}, bezier = "{bez}"' + (f', style = "{sty}"' if sty else "") + " })")
+    if h.get("lua"): L.append(h["lua"])
+    tmp = f"{M2}/rice-hypr.lua.tmp"; open(tmp, "w").write("\n".join(L) + "\n"); os.replace(tmp, f"{M2}/rice-hypr.lua")
+    if game_on() and not force:
+        say("  · игровой режим включён — геометрия и анимации райса применятся после m2res-game off"); sh(f"{S}/m2res-paint", "apply", t=20); return
+    rc = sh("hyprctl", "eval", f"dofile('{M2}/rice-hypr.lua')")
+    if rc.returncode or "ok" not in rc.stdout: say(f"  ! hyprctl eval: {rc.stdout.strip()} {rc.stderr.strip()}")
+    sh(f"{S}/m2res-paint", "apply", t=20)
+
+
+def mako_set(text, kv):
+    head, sep, tail = text.partition("\n[")
+    for k, v in kv.items():
+        pat = re.compile(rf"(?m)^{re.escape(k)}=.*$")
+        line = f"{k}={v}"
+        head = pat.sub(lambda _m: line, head, 1) if pat.search(head) else head.rstrip("\n") + "\n" + line + "\n"
+    return head + (sep + tail if sep else "")
+
+
+def layer_mako(r):
+    m = dict(r.get("mako", {})); acc = acc_now()
+    if not m: return
+    p = f"{M2}/mako/config"; t = open(p).read()
+    body = m.pop("body", "#b4b6a6"); low = m.pop("low", None); low_border = m.pop("low_border", None)
+    low_text = m.pop("low_text", low); low_title = m.pop("low_title", low)
+    crit = m.pop("crit", None); crit_bg = m.pop("crit_bg", None); crit_body = m.pop("crit_body", None)
+    kv = {k: str(v) for k, v in m.items()}
+    kv["border-color"] = acc
+    kv["format"] = f'<span color="{acc}" size="small" font_weight="heavy"><b>%a</b></span>\\n<b>%s</b>\\n<span color="{body}">%b</span>'
+    kv["progress-color"] = f"over {acc}30"
+    t = mako_set(t, kv)
+    def sect(t, head, fn):
+        i = t.find(head)
+        if i < 0: return t
+        j = t.find("\n[", i + 1); j = len(t) if j < 0 else j
+        return t[:i] + fn(t[i:j]) + t[j:]
+    if low:
+        def f(s):
+            s = re.sub(r"(?m)^text-color=.*$", lambda _m: f"text-color={low_text}", s)
+            s = re.sub(r"(?m)^border-color=.*$", lambda _m: f"border-color={low_border or low}", s)
+            return re.sub(r"(?m)^format=.*$", lambda _m: f'format=<span color="{low_title}" size="small"><b>%a</b></span>\\n<b>%s</b>\\n<span color="{low}">%b</span>', s)
+        t = sect(t, "[urgency=low]", f)
+    def fc(s):
+        s = re.sub(r"(?m)^border-color=.*$", lambda _m: f"border-color={crit or acc}", s)
+        if crit_bg: s = re.sub(r"(?m)^background-color=.*$", lambda _m: f"background-color={crit_bg}", s)
+        s = re.sub(r"(?m)^format=.*$", lambda _m: f'format=<span color="{crit or acc}" size="small"><b>󰀦  %a</b></span>\\n<b>%s</b>\\n<span color="{crit_body or body}">%b</span>', s)
+        return s
+    t = sect(t, "[urgency=critical]", fc)
+    open(p, "w").write(t); sh("makoctl", "reload")
+
+
+def layer_lock(r):
+    L = dict(r.get("lock", {}))
+    font = L.get("font", "CaskaydiaMono Nerd Font Mono")
+    lines = [f"$font = {font}", f"$lock_bg = rgba({L.get('bg', '050605')}ff)", f"$lock_panel = rgba({L.get('panel', '0a0a0ad9')})",
+             f"$lock_inner = rgba({L.get('inner', '1d1e1bf5')})", f"$lock_text = {L.get('text', '$accent')}"]
+    open(f"{M2}/lock/rice.conf", "w").write("# сгенерировано m2res-rice — не править\n" + "\n".join(lines) + "\n")
+    p = f"{M2}/lock/hyprlock.conf"; t = open(p).read(); o = t
+    if "rice.conf" not in t:
+        t = re.sub(r"(?m)^(\$font = .*)$", r"\1\nsource = ~/.config/m2res/lock/rice.conf", t, count=1)
+        t = t.replace("color = rgba(050605ff)", "color = $lock_bg").replace("rgba(0a0a0ad9)", "$lock_panel")
+        t = t.replace("inner_color = rgba(1d1e1bf5)", "inner_color = $lock_inner").replace("font_color = rgba(d4ff00ff)", "font_color = $lock_text")
+        # $font в hyprlock.conf объявлен до source — rice.conf переопределяет
+        if t != o: open(p, "w").write(t)
+    sh("pkill", "-f", f"^python3 {M2}/scripts/m2res-lockfx")
+
+
+def ghostty_base():
+    """Реальные значения Ghostty без райса: тема из dotfiles + базовые ключи конфига. Нужны, чтобы при смене на райс без своих цветов
+    вернуть прежний вид явно (Ghostty при перезагрузке не всегда сбрасывает снятые ключи)."""
+    out = {}
+    try:
+        th = re.search(r"(?m)^theme\s*=\s*(.+)$", open(f"{H}/.local/share/dotfiles/current/theme/ghostty.conf").read())
+        name = th[1].strip().strip('"') if th else ""
+        for d in (f"{H}/.config/ghostty/themes", "/usr/share/ghostty/themes"):
+            f = f"{d}/{name}"
+            if name and os.path.isfile(f):
+                for l in open(f):
+                    l = l.strip()
+                    if l and not l.startswith("#") and "=" in l: out.setdefault(l.split("=")[0].strip(), []).append(l.split("=", 1)[1].strip())
+                break
+    except Exception: pass
+    try:
+        cf = open(f"{H}/.config/ghostty/config").read()
+        for k in ("background-opacity", "window-padding-x", "window-padding-y", "font-family"):
+            m = re.search(rf"(?m)^{k}\s*=\s*(.+)$", cf)
+            if m: out[k] = [m[1].strip()]
+    except Exception: pass
+    return out
+
+
+def layer_ghostty(r):
+    g = r.get("ghostty") or {}; p = f"{M2}/ghostty-rice.conf"
+    base = ghostty_base(); L = ["# сгенерировано m2res-rice — не править"]
+    def put(k, v): L.append(f"{k} = {v}")
+    for k in ("background", "foreground", "selection-background", "selection-foreground", "cursor-color", "cursor-text"):
+        if k in g: put(k, g[k])
+        elif k in base: put(k, base[k][0])
+    pal = g.get("palette")
+    if pal:
+        for i, c in enumerate(pal): put("palette", f"{i}={c}")
+    else:
+        for v in base.get("palette", []): put("palette", v)
+    put("background-opacity", g.get("opacity", (base.get("background-opacity") or ["0.8"])[0]))
+    pad = g.get("padding") or [(base.get("window-padding-x") or ["8"])[0], (base.get("window-padding-y") or ["10"])[0]]
+    put("window-padding-x", pad[0]); put("window-padding-y", pad[1])
+    fam = g.get("font") or (base.get("font-family") or [None])[0]
+    if fam: put("font-family", fam if fam.startswith('"') else f'"{fam}"')
+    open(p, "w").write("\n".join(L) + "\n")
+    cf = f"{H}/.config/ghostty/config"
+    try:
+        t = open(cf).read()
+        if "ghostty-rice.conf" not in t:
+            open(cf, "a").write('\n# m2res: райс (фон, палитра терминала)\nconfig-file = ?"~/.config/m2res/ghostty-rice.conf"\n')
+    except Exception: pass
+    sh("pkill", "-USR2", "-x", "ghostty")
+
+
+def layer_wall(r):
+    import hashlib
+    flag = f"{CACHE}/rice-wall.json"; cur = f"{M2}/wallpapers/current.png"; user = f"{CACHE}/wall-user.png"
+    def sha(p):
+        try: return hashlib.sha1(open(p, "rb").read()).hexdigest()
+        except Exception: return ""
+    def put(src):
+        from PIL import Image
+        im = Image.open(src).convert("RGB"); tmp = f"{M2}/wallpapers/.current.tmp.png"; im.save(tmp); os.replace(tmp, cur)
+        name, _, _ = mon(); sh("hyprctl", "hyprpaper", "wallpaper", f"{name},{cur}")
+    try: fl = json.load(open(flag))
+    except Exception: fl = {}
+    w = r.get("wall")
+    if not w:
+        if fl and os.path.isfile(user):
+            if sha(cur) == fl.get("sha"): put(user)       # обои не меняли руками — вернуть свои
+            else: say("  · обои меняли вручную — оставляю как есть")
+        if fl: os.remove(flag)
+        return
+    p = os.path.expanduser(w) if w.startswith(("~", "/")) else (find_file(r, w) or "")
+    if not os.path.isfile(p): say(f"  · обои не найдены: {w}"); return
+    if not fl or sha(cur) != fl.get("sha"):               # первый райс с обоями (или обои сменили руками) — запомнить свои
+        try: shutil.copyfile(cur, user)
+        except Exception: pass
+    put(p); json.dump({"rice": r["_name"], "sha": sha(cur)}, open(flag, "w"))
+
+
+def layer_dock(r):
+    d = r.get("dock")
+    if not d: return
+    p = f"{M2}/dock.conf"; t = open(p).read()
+    for k, v in d.items():
+        if re.search(rf"(?m)^{k}=", t): t = re.sub(rf"(?m)^{k}=\S*", f"{k}={v}", t)
+        else: t += f"\n{k}={v}\n"
+    open(p, "w").write(t)
+
+
+def layer_sound(r):
+    s = r.get("sound")
+    if not s: return
+    p = f"{M2}/notify-sound.conf"; t = open(p).read()
+    for key, val in (("file", s.get("normal")), ("file_critical", s.get("critical")), ("file_low", s.get("low"))):
+        if val: t = re.sub(rf"(?m)^{key}=.*$", f"{key}=~/.config/m2res/sounds/{val}.wav", t, count=1)
+    if "volume" in s: t = re.sub(r"(?m)^volume=.*$", f"volume={s['volume']}", t, count=1)
+    open(p, "w").write(t)
+
+
+def restart_widgets():
+    """долгоживущие виджеты читают стиль при старте — перезапускаем (дальше стартуют сами по требованию)"""
+    docked = sh("pgrep", "-f", f"^python3 {M2}/player/dock.py").returncode == 0
+    for n in ("layoutosd", "volume", "switcher", "dock", "player"):
+        sh("pkill", "-f", f"^python3 {M2}/player/{n}.py")
+    time.sleep(0.3)
+    if docked: bg(f"{S}/m2res-dock", "start")
+    for d in ("m2res-volume", "m2res-layout", "m2res-switch"): bg(f"{S}/{d}", "daemon")
+
+
+# ───────────────────────── применение ─────────────────────────
+def apply(name, keep_accent=False, no_wall=False, quiet=False, remember=True):
+    r = load(name); t0 = time.time()
+    prev = current()
+    if remember and prev and prev != name:
+        json.dump({"prev": prev, "at": time.time()}, open(PREVF, "w"))
+    def step(label, fn, *a):
+        try: fn(*a)
+        except SystemExit: raise
+        except Exception as e: say(f"  ! {label}: {type(e).__name__}: {e}")
+        else: 
+            if not quiet: say(f"  ✓ {label}")
+    pal = r.get("palette", {})
+    if pal.get("accent") and not keep_accent:
+        step("акцент " + pal["accent"], lambda: sh(f"{S}/m2res-accent", "set", pal["accent"], t=40))
+    open(STATE, "w").write(name)
+    step("виджеты (форма, рамки, шрифт)", layer_widgets, r)
+    step("Waybar", layer_bar, r)
+    step("Hyprland (геометрия, анимации, рамки)", layer_hypr, r)
+    step("уведомления mako", layer_mako, r)
+    step("экран блокировки", layer_lock, r)
+    step("Ghostty", layer_ghostty, r)
+    step("док и звуки", lambda: (layer_dock(r), layer_sound(r)))
+    if not no_wall: step("обои", layer_wall, r)
+    step("перезапуск виджетов", restart_widgets)
+    sh("pkill", "-RTMIN+12", "-x", "waybar")
+    if not quiet: say(f"райс «{r.get('title', name)}» применён за {time.time() - t0:.1f} с")
+
+
+def regen(): apply(current() or "m2res", keep_accent=True, no_wall=True, remember=False)
+
+
+def cmd_preview(name, secs=12):
+    load(name)
+    cur = current()
+    pv = {}
+    try: pv = json.load(open(PVF))
+    except Exception: pass
+    base = pv.get("base") if pv.get("until", 0) > time.time() else cur
+    tok = str(time.time())
+    json.dump({"base": base, "name": name, "until": time.time() + secs, "tok": tok}, open(PVF, "w"))
+    apply(name, quiet=True, remember=False)
+    bg(sys.executable, os.path.abspath(__file__), "_revert", tok, str(secs))
+    say(f"предпросмотр «{name}» на {secs} с — оставить: m2res-rice keep")
+
+
+def cmd_revert(tok, secs):
+    time.sleep(float(secs))
+    try: pv = json.load(open(PVF))
+    except Exception: return
+    if pv.get("tok") != tok or pv.get("done"): return
+    pv["done"] = 1; json.dump(pv, open(PVF, "w"))
+    apply(pv["base"], quiet=True, remember=False)
+    sh("notify-send", "-a", "m2res", "Райс", f"Вернул «{pv['base']}» (предпросмотр «{pv['name']}» не подтверждён)")
+
+
+def cmd_cancel():
+    try: pv = json.load(open(PVF))
+    except Exception: raise SystemExit("нет предпросмотра")
+    if pv.get("done"): raise SystemExit("предпросмотр уже закончился")
+    pv["done"] = 1; json.dump(pv, open(PVF, "w"))
+    apply(pv["base"], quiet=True, remember=False); say(f"вернул «{pv['base']}»")
+
+
+def cmd_keep():
+    try: pv = json.load(open(PVF))
+    except Exception: raise SystemExit("нет предпросмотра")
+    if pv.get("done"): raise SystemExit("предпросмотр уже закончился")
+    pv["done"] = 1; json.dump(pv, open(PVF, "w"))
+    if pv["base"] != pv["name"]: json.dump({"prev": pv["base"], "at": time.time()}, open(PREVF, "w"))
+    say(f"оставил «{pv['name']}»")
+
+
+def cmd_cycle(d):
+    ns = names(); c = current()
+    i = ns.index(c) if c in ns else -1
+    apply(ns[(i + d) % len(ns)])
+
+
+def cmd_back():
+    try: p = json.load(open(PREVF))["prev"]
+    except Exception: raise SystemExit("предыдущего райса нет")
+    cur = current(); apply(p, remember=False)
+    json.dump({"prev": cur}, open(PREVF, "w"))
+
+
+def cmd_list():
+    c = current()
+    for n in names():
+        try: r = load(n)
+        except SystemExit: continue
+        print(f" {'●' if n == c else ' '} {n:<18} {r.get('title', n):<18} {r.get('desc', '')}")
+
+
+def cmd_dump():
+    """все райсы с учётом extends — для карусели"""
+    c = current(); out = []
+    for n in names():
+        try: r = load(n)
+        except SystemExit: continue
+        out.append({"name": n, "title": r.get("title", n), "desc": r.get("desc", ""), "icon": r.get("icon", ""), "pal": r.get("palette", {}),
+                    "wd": r.get("widgets", {}), "bar": r.get("bar", {}), "cur": n == c, "wall": bool(r.get("wall")),
+                    "ext": r.get("extends") or ""})
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def cmd_status():
+    c = current(); say(f"текущий: {c or '—'}")
+    if not c: return
+    r = load(c); w = {}
+    try: w = json.load(open(f"{M2}/player/style.json"))
+    except Exception: pass
+    say(f"  виджеты: frame={w.get('frame')} shape={w.get('shape')} font={w.get('font')}")
+    say(f"  акцент: {acc_now()} (в райсе {r.get('palette', {}).get('accent', '—')})")
+    bad = check_sync(r)
+    say("  синхронизация: " + ("ОК" if not bad else "; ".join(bad)))
+
+
+def check_sync(r):
+    bad = []
+    try:
+        w = json.load(open(f"{M2}/player/style.json"))
+        if w.get("name") != r["_name"]: bad.append("style.json от другого райса")
+    except Exception: bad.append("нет player/style.json")
+    try:
+        cfg = json.load(open(f"{M2}/waybar/config"))
+        want = r.get("bar", {}).get("height")
+        if want and cfg.get("height") != want: bad.append("waybar/config не совпадает с райсом")
+        if not os.path.isfile(f"{M2}/waybar/config.base"): bad.append("нет waybar/config.base")
+    except Exception: bad.append("waybar/config не читается")
+    if f"райс: {r['_name']}" not in open(f"{M2}/waybar/style.css").read(): bad.append("waybar/style.css от другого райса")
+    if not os.path.isfile(f"{M2}/rice-hypr.lua"): bad.append("нет rice-hypr.lua")
+    return bad
+
+
+def cmd_json():
+    c = current(); r = None
+    try: r = load(c) if c else None
+    except SystemExit: pass
+    ns = names()
+    title = (r or {}).get("title", c or "—")
+    ic = (r or {}).get("icon", "󰏘")
+    tip = f"Райс: {title}\\n{(r or {}).get('desc', '')}\\nклик — выбрать · ПКМ — следующий"
+    print(json.dumps({"text": f"{ic} {title}", "tooltip": tip.replace("\\n", "\n"), "class": c or "none", "alt": c}, ensure_ascii=False))
+
+
+def cmd_validate(name=None):
+    bad = 0
+    for n in ([name] if name else names()):
+        try: r = load(n)
+        except (SystemExit, Exception) as e: print(f"FAIL {n}: {e}"); bad += 1; continue
+        errs = []
+        pal = r.get("palette", {})
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", pal.get("accent", "")): errs.append("palette.accent не #rrggbb")
+        w = r.get("widgets", {})
+        if w.get("frame", "glow") not in ("glow", "flat", "neon", "brutal", "glass", "double", "soft"): errs.append("widgets.frame")
+        if w.get("shape", "round") not in ("round", "chamfer", "square", "pill"): errs.append("widgets.shape")
+        if r.get("border", "gradient") not in ("gradient", "solid"): errs.append("border")
+        bar = r.get("bar", {})
+        base = json.load(open(f"{M2}/waybar/config.base"))
+        for side in ("left", "center", "right"):
+            for m in bar.get(side, []):
+                if m not in base: errs.append(f"bar.{side}: нет модуля {m}")
+        cf = bar.get("css")
+        if cf and not find_file(r, cf): errs.append(f"нет {cf}")
+        wl = r.get("wall")
+        if wl and not wl.startswith(("~", "/")) and not find_file(r, wl): errs.append(f"нет обоев {wl}")
+        if wl and wl.startswith(("~", "/")) and not os.path.isfile(os.path.expanduser(wl)): errs.append(f"нет обоев {wl}")
+        print(("PASS " if not errs else "FAIL ") + n + ("" if not errs else ": " + "; ".join(errs))); bad += bool(errs)
+    sys.exit(1 if bad else 0)
+
+
+# ───────────────────────── создание / обмен ─────────────────────────
+def cmd_new(name, src=None):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name): raise SystemExit("имя: латиница, цифры, - _")
+    d = f"{RICES}/{name}"
+    if os.path.exists(d): raise SystemExit("уже есть")
+    src = src or current() or "m2res"
+    shutil.copytree(f"{RICES}/{src}", d, ignore=shutil.ignore_patterns("preview.jpg"))
+    r = json.load(open(f"{d}/rice.json")); r["title"] = name; r["desc"] = f"копия «{src}»"; r["order"] = 70
+    json.dump(r, open(f"{d}/rice.json", "w"), indent=1, ensure_ascii=False)
+    say(f"создан {d} — правьте rice.json, затем: m2res-rice apply {name}")
+
+
+def cmd_pack(name, out=None):
+    load(name); out = out or f"{H}/{name}.m2rice"
+    with tarfile.open(out, "w:gz") as t:
+        t.add(f"{RICES}/{name}", arcname=name, filter=lambda ti: None if ti.name.endswith(".bak") else ti)
+    say(f"{out} ({os.path.getsize(out) // 1024} КБ)")
+
+
+def cmd_install(src):
+    tmp = tempfile.mkdtemp(prefix="m2rice-")
+    try:
+        if src.startswith(("http://", "https://", "git@")) or src.endswith(".git"):
+            if sh("git", "clone", "--depth", "1", src, f"{tmp}/g", t=120).returncode: raise SystemExit("git clone не удался")
+            root = f"{tmp}/g"
+        elif os.path.isdir(src): root = os.path.abspath(src)
+        else:
+            with tarfile.open(src) as t:
+                for m in t.getmembers():
+                    if m.name.startswith(("/", "..")) or ".." in m.name.split("/") or not (m.isfile() or m.isdir()): raise SystemExit(f"небезопасный архив: {m.name}")
+                t.extractall(f"{tmp}/x")
+            root = f"{tmp}/x"
+        found = []
+        for d, _, fs in os.walk(root):
+            if "rice.json" in fs and ".git" not in d: found.append(d)
+        if not found: raise SystemExit("в источнике нет rice.json")
+        for d in found:
+            n = os.path.basename(d.rstrip("/")) if d != root else os.path.basename(src.rstrip("/")).replace(".m2rice", "").replace(".git", "")
+            n = re.sub(r"[^a-z0-9_-]", "-", n.lower()) or "rice"
+            dst = f"{RICES}/{n}"
+            if os.path.exists(dst): n += "-" + time.strftime("%H%M%S"); dst = f"{RICES}/{n}"
+            shutil.copytree(d, dst, ignore=shutil.ignore_patterns(".git"))
+            r = json.load(open(f"{dst}/rice.json"))
+            if r.get("hypr", {}).get("lua"): say(f"  ! «{n}» содержит сырой Lua в hypr.lua — проверьте rice.json перед apply")
+            say(f"установлен «{n}» — m2res-rice apply {n}")
+    finally: shutil.rmtree(tmp, ignore_errors=True)
+
+
+def cmd_import_themes(src=None):
+    src = src or f"{H}/.local/share/dotfiles/themes"
+    if not os.path.isdir(src): raise SystemExit(f"нет {src}")
+    import colorsys
+    for t in sorted(os.listdir(src)):
+        d = f"{src}/{t}"
+        if not os.path.isdir(d): continue
+        bgc = fgc = None
+        wb = f"{d}/waybar.css"
+        if os.path.isfile(wb):
+            tx = open(wb).read()
+            m = re.search(r"@define-color\s+background\s+(#[0-9a-fA-F]{6})", tx); bgc = m.group(1) if m else None
+            m = re.search(r"@define-color\s+foreground\s+(#[0-9a-fA-F]{6})", tx); fgc = m.group(1) if m else None
+        pal = []; gcf = f"{d}/ghostty.conf"; gb = gf = None
+        if os.path.isfile(gcf):
+            for l in open(gcf):
+                l = l.strip()
+                m = re.match(r"palette\s*=\s*(\d+)=(#[0-9a-fA-F]{6})", l)
+                if m: pal.append((int(m[1]), m[2]))
+                m = re.match(r"background\s*=\s*(#?[0-9a-fA-F]{6})", l)
+                if m: gb = "#" + m[1].lstrip("#")
+                m = re.match(r"foreground\s*=\s*(#?[0-9a-fA-F]{6})", l)
+                if m: gf = "#" + m[1].lstrip("#")
+        if not pal:
+            try:
+                th = re.search(r"(?m)^theme\s*=\s*(.+)$", open(gcf).read())
+                tf = f"/usr/share/ghostty/themes/{th[1].strip().strip(chr(34))}" if th else ""
+                for l in open(tf):
+                    m = re.match(r"\s*palette\s*=\s*(\d+)=(#[0-9a-fA-F]{6})", l)
+                    if m: pal.append((int(m[1]), m[2]))
+                    m = re.match(r"\s*background\s*=\s*(#[0-9a-fA-F]{6})", l)
+                    if m: gb = m[1]
+                    m = re.match(r"\s*foreground\s*=\s*(#[0-9a-fA-F]{6})", l)
+                    if m: gf = m[1]
+            except Exception: pass
+        sel = None
+        for wf in (f"{d}/walker.css", wb):
+            if os.path.isfile(wf) and not sel:
+                m = re.search(r"@define-color\s+selected-text\s+(#[0-9a-fA-F]{6})", open(wf).read()); sel = m[1] if m else None
+        bgc = bgc or gb; fgc = fgc or gf
+        if not (bgc and fgc): say(f"  · {t}: нет цветов — пропуск"); continue
+        pal.sort(); cand = [c for i, c in pal if i in (1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14)]
+        best, sc = None, -1
+        for c in cand:
+            rgb = [x / 255 for x in hex_rgb(c)]; h, s_, v = colorsys.rgb_to_hsv(*rgb)
+            if s_ * v > sc and 0.35 < v: best, sc = c, s_ * v
+        acc = (sel or best or fgc).lower()
+        bl = lum(hex_rgb(bgc)) > 0.5; b = hex_rgb(bgc); f = hex_rgb(fgc)
+        k = lambda c: [round(x / 255, 3) for x in c]
+        name = "theme-" + re.sub(r"[^a-z0-9]+", "-", t.lower())
+        wall = ""
+        bd = f"{d}/backgrounds"
+        if os.path.isdir(bd):
+            fs = sorted(x for x in os.listdir(bd) if x.lower().endswith((".png", ".jpg", ".jpeg")))
+            if fs:       # обои копируем внутрь райса (≤3000 px, jpg) — на другой машине dotfiles-тем может не быть
+                os.makedirs(f"{RICES}/theme-{re.sub(r'[^a-z0-9]+', '-', t.lower())}", exist_ok=True)
+                try:
+                    from PIL import Image
+                    im = Image.open(f"{bd}/{fs[0]}").convert("RGB"); im.thumbnail((3000, 3000))
+                    im.save(f"{RICES}/theme-{re.sub(r'[^a-z0-9]+', '-', t.lower())}/wall.jpg", quality=86); wall = "wall.jpg"
+                except Exception: wall = f"~/.local/share/dotfiles/themes/{t}/backgrounds/{fs[0]}"
+        pb = lambda a: f"rgba({b[0]}, {b[1]}, {b[2]}, {a})"
+        mix = lambda a, c, x: tuple(round(a[i] + (c[i] - a[i]) * x) for i in range(3))
+        hov = mix(b, f, 0.12); dim = mix(f, b, 0.40)
+        on = "#101010" if lum(hex_rgb(acc)) > 0.45 else "#f5f5f5"
+        r = {"extends": "m2res", "order": 60, "title": t.replace("-", " ").title(), "icon": "󰏘",
+             "desc": f"палитра темы {t} на скелете m2res" + (" · светлая" if bl else ""),
+             "palette": {"accent": acc, "pill_bg": pb(0.92), "pill_hover": f"rgba({hov[0]}, {hov[1]}, {hov[2]}, 0.96)",
+                         "pill_fg": fgc, "pill_dim": "#%02x%02x%02x" % dim, "pill_ink": on},
+             "widgets": {"bg": k(b) + [0.97], "fg": k(f), "dim": k(dim), "ink": [0, 0, 0] if bl else [1, 1, 1],
+                         "on_acc": k(hex_rgb(on)), "tint": True, "frame": "soft" if bl else "glow"},
+             "mako": {"background-color": f"{bgc}ee", "text-color": fgc, "body": "#%02x%02x%02x" % dim, "low": "#%02x%02x%02x" % dim},
+             "lock": {"bg": bgc.lstrip("#"), "panel": bgc.lstrip("#") + "d9", "inner": bgc.lstrip("#") + "f2", "text": fgc},
+             "ghostty": {"background": bgc, "foreground": fgc, "palette": [c for _, c in pal][:16]} if len(pal) >= 16 else {"background": bgc, "foreground": fgc},
+             "wall": wall}
+        if bl: r["bar"] = {"css": "bar-light.css"}
+        os.makedirs(f"{RICES}/{name}", exist_ok=True)
+        json.dump(r, open(f"{RICES}/{name}/rice.json", "w"), indent=1, ensure_ascii=False)
+        if bl: open(f"{RICES}/{name}/bar-light.css", "w").write("#workspaces button { color: @pill_fg; }\n#workspaces button.active { color: @on_accent; }\n")
+        say(f"  ✓ {name}  (фон {bgc}, текст {fgc}, акцент {acc})")
+
+
+# ───────────────────────── превью ─────────────────────────
+def cmd_shoot(which="all"):
+    """Превью райса: пустой воркспейс 9 (чужие окна в кадр не попадают) + лаунчер по центру + центр управления справа → rices/NAME/preview.jpg"""
+    ns = names() if which == "all" else [which]
+    os.environ["M2_HOST"] = "m2res"          # имя вашей машины в превью не попадает
+    cur = current(); name, w, h = mon()
+    try: ws0 = json.loads(sh("hyprctl", "-j", "activeworkspace").stdout)["id"]
+    except Exception: ws0 = 1
+    sh("hyprctl", "dispatch", "hl.dsp.focus({ workspace = '9' })"); time.sleep(0.5)
+    kb = lambda: sh("hyprctl", "switchxkblayout", "nuphy-nuphy-halo65-he", "0")
+    try:
+        for n in ns:
+            say(f"снимаю {n}…"); apply(n, quiet=True, remember=False); time.sleep(2.5)
+            sh(f"{S}/m2res-control", "toggle"); time.sleep(1.8); a = f"/tmp/m2rice-{n}-c.png"; sh("grim", "-o", name, a, t=20)
+            sh(f"{S}/m2res-control", "toggle"); time.sleep(0.7)
+            sh(f"{S}/m2res-launcher", "toggle"); time.sleep(1.9); b = f"/tmp/m2rice-{n}-l.png"; sh("grim", "-o", name, b, t=20)
+            sh(f"{S}/m2res-launcher", "toggle"); time.sleep(0.6)
+            out = f"{RICES}/{n}/preview.jpg"
+            cw = 700
+            sh("magick", b, "(", a, "-crop", f"{cw}x820+{w - cw - 20}+36", "+repage", ")", "-geometry", f"+{w - cw - 20}+36", "-composite",
+               "-resize", "2000x", "-quality", "86", out, t=40)
+            for f in (a, b):
+                try: os.remove(f)
+                except Exception: pass
+            say(f"  → {out}")
+    finally:
+        kb(); sh("hyprctl", "dispatch", f"hl.dsp.focus({{ workspace = '{ws0}' }})")
+        if cur: apply(cur, quiet=True, remember=False)
+
+
+def cmd_pick(): bg("env", f"LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so", "python3", f"{M2}/player/ricepick.py")
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help", "help"): print(__doc__); return
+    c = a[0]
+    try:
+        if c == "list": cmd_list()
+        elif c == "status": cmd_status()
+        elif c == "apply":
+            if len(a) < 2: raise SystemExit("m2res-rice apply NAME")
+            apply(a[1], keep_accent="--keep-accent" in a, no_wall="--no-wall" in a)
+        elif c == "preview": cmd_preview(a[1], int(a[2]) if len(a) > 2 else 12)
+        elif c == "_revert": cmd_revert(a[1], a[2])
+        elif c == "keep": cmd_keep()
+        elif c == "revert": cmd_cancel()
+        elif c == "back": cmd_back()
+        elif c == "next": cmd_cycle(1)
+        elif c == "prev": cmd_cycle(-1)
+        elif c == "pick": cmd_pick()
+        elif c == "json": cmd_json()
+        elif c == "dump": cmd_dump()
+        elif c == "regen": regen()
+        elif c == "hypr": layer_hypr(load(current() or "m2res"), force=True)
+        elif c == "validate": cmd_validate(a[1] if len(a) > 1 else None)
+        elif c == "new": cmd_new(a[1], a[a.index("--from") + 1] if "--from" in a else None)
+        elif c == "pack": cmd_pack(a[1], a[2] if len(a) > 2 else None)
+        elif c == "install": cmd_install(a[1])
+        elif c == "import-themes": cmd_import_themes(a[1] if len(a) > 1 else None)
+        elif c == "shoot": cmd_shoot(a[1] if len(a) > 1 else "all")
+        else: print(__doc__); sys.exit(2)
+    except IndexError: raise SystemExit(f"не хватает аргументов: m2res-rice {c} …")
+
+
+if __name__ == "__main__":
+    main()
