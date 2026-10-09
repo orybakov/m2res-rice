@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# m2res-shot area|edit|screen|window — скриншоты в стиле райса
+#   area    выделить область мышью → файл + буфер обмена + уведомление с миниатюрой
+#   edit    выделить область → редактор разметки satty (стрелки, текст, рамки, размытие; Enter — копировать, Ctrl+S — файл)
+#   screen  весь экран (монитор под курсором)
+#   window  активное окно
+# Файлы: ~/Pictures/Screenshots/shot-ГГГГ-ММ-ДД_ЧЧ-ММ-СС.png
+# Для тестов: M2_SHOT_GEOM="X,Y WxH" вместо выделения мышью; M2_SHOT_DIR — другая папка.
+set -u
+DIR="${M2_SHOT_DIR:-$HOME/Pictures/Screenshots}"; mkdir -p "$DIR"
+FILE="$DIR/shot-$(date +%F_%H-%M-%S).png"
+ACC=$(jq -r '.accent // "#b0d500"' "$HOME/.config/m2res/player/colors.json" 2>/dev/null || echo "#b0d500")
+
+pick_area(){
+  if [ -n "${M2_SHOT_GEOM:-}" ]; then echo "$M2_SHOT_GEOM"; return; fi
+  slurp -d -b '#000000a0' -c "${ACC}ff" -s "${ACC}22" -B '#0a0a0aff' -w 2 -F 'CaskaydiaMono Nerd Font Mono'
+}
+geom_window(){ hyprctl -j activewindow | jq -r 'select(.mapped) | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"'; }
+geom_screen(){ hyprctl -j monitors | jq -r --argjson c "$(hyprctl -j cursorpos)" '([.[]|select(.x<=$c.x and $c.x<.x+.width and .y<=$c.y and $c.y<.y+.height)][0] // .[0]) | "\(.x),\(.y) \(.width)x\(.height)"'; }
+
+mode="${1:-area}"
+case "$mode" in
+  area|edit) G=$(pick_area) || exit 0 ;;
+  screen)    G=$(geom_screen) ;;
+  window)    G=$(geom_window) ;;
+  *) echo "usage: $0 area|edit|screen|window" >&2; exit 2 ;;
+esac
+[ -n "${G:-}" ] || { notify-send -a Screenshot "Скриншот отменён" "нет области"; exit 1; }
+sleep 0.18                                                  # дать slurp исчезнуть с экрана
+
+if [ "$mode" = edit ]; then
+  grim -g "$G" - | satty --filename - --output-filename "$FILE" --early-exit --copy-command wl-copy \
+        --actions-on-enter save-to-clipboard --actions-on-escape exit --initial-tool arrow >/dev/null 2>&1
+  [ -s "$FILE" ] && notify-send -a Screenshot -i "$FILE" "Скриншот сохранён" "${FILE/#$HOME/~}"
+  exit 0
+fi
+
+grim -g "$G" "$FILE" || { notify-send -u critical -a Screenshot "Ошибка скриншота" "grim -g \"$G\""; exit 1; }
+wl-copy --type image/png < "$FILE"
+sz=$(du -h "$FILE" | cut -f1)
+notify-send -a Screenshot -i "$FILE" "Скриншот · $(echo "$G" | sed 's/.* //') · $sz" "в буфере обмена · ${FILE/#$HOME/~}"
+echo "$FILE"

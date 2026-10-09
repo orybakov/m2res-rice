@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# m2res-theme <картинка> [акцент: lime|pink|yellow|#rrggbb]
+# Делает моно-обои с одним акцентом (как в видео), красит ими matugen-палитру
+# и перезапускает waybar/плеер. Системные конфиги не трогает.
+set -euo pipefail
+M2="$HOME/.config/m2res"
+src=${1:?usage: m2res-theme <image> [lime|pink|yellow|#hex]}
+case "${2:-lime}" in
+  lime) acc="#d4ff00";; pink) acc="#ff2d78";; yellow) acc="#ffc933";; \#*) acc="$2";;
+  *) echo "неизвестный акцент" >&2; exit 1;;
+esac
+out="$M2/wallpapers/current.png"
+magick "$src" -colorspace Gray -contrast-stretch 2%x2% \
+  +level-colors "#070900,$acc" "$out"
+matugen color hex "$acc" -c "$M2/matugen/config.toml" -t scheme-vibrant -m dark -q
+ln -nsf "$out" "$M2/wallpapers/current"
+# обои через hyprpaper (если запущен)
+if pgrep -x hyprpaper >/dev/null; then
+  hyprctl monitors -j | jq -r '.[].name' | while read -r m; do
+    hyprctl hyprpaper preload "$out" >/dev/null 2>&1 || true
+    hyprctl hyprpaper wallpaper "$m,$out" >/dev/null 2>&1 || true
+  done
+fi
+"$M2/scripts/m2res-bar" restart
+echo "OK: $acc -> $out"

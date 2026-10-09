@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# m2res-profile <имя>|cycle|back|status|list|json — профили райса одним действием (SUPER+CTRL+P = следующий). Конфиг: ~/.config/m2res/profiles.conf
+#   <имя>   применить профиль: акцент/обои, «не беспокоить», питание, раскладка текущего стола, ночной свет, игровой режим
+#   back    вернуть всё, как было ДО первого применения профиля (состояние в ~/.cache/m2res/profile-prev.json)
+set -u
+M2="$HOME/.config/m2res"; S="$HOME/.cache/m2res"; CUR="$S/profile"; PREV="$S/profile-prev.json"; mkdir -p "$S"
+. "$M2/profiles.conf"
+dnd_on(){ makoctl mode 2>/dev/null | grep -qx do-not-disturb; }
+night_on(){ pgrep -x sunsetr >/dev/null; }
+snap(){   # запомнить исходное состояние (один раз)
+  [ -f "$PREV" ] && return
+  local acc pw lay g=0 d=0 n=off
+  acc=$(jq -r .accent "$M2/player/colors.json"); pw=$(powerprofilesctl get 2>/dev/null)
+  lay=$("$M2/scripts/m2res-preset" status 2>/dev/null); [ "$lay" = master ] && lay=center
+  [ -f "$S/game.json" ] && g=1; dnd_on && d=1; night_on && n=on
+  jq -n --arg a "$acc" --arg p "$pw" --arg l "$lay" --argjson g "$g" --argjson d "$d" --arg n "$n" --argjson ws "$(hyprctl -j activeworkspace | jq .id)" \
+    '{accent:$a,power:$p,layout:$l,game:$g,dnd:$d,night:$n,ws:$ws}' > "$PREV"
+}
+apply(){   # accent wall dnd power layout night game — независимые шаги идут параллельно, чтобы переключение не «залипало»
+  local acc=$1 wall=$2 dnd=$3 pw=$4 lay=$5 night=$6 game=$7
+  (  # ветка 1: игровой режим первым (он сам трогает DND/питание/обои), затем DND и питание поверх него
+    if [ "$game" = 1 ]; then [ -f "$S/game.json" ] || "$M2/scripts/m2res-game" on >/dev/null 2>&1
+    elif [ "$game" = 0 ]; then [ -f "$S/game.json" ] && "$M2/scripts/m2res-game" off >/dev/null 2>&1; fi
+    if [ "$dnd" = 1 ]; then dnd_on || makoctl mode -a do-not-disturb >/dev/null 2>&1
+    elif [ "$dnd" = 0 ]; then dnd_on && makoctl mode -r do-not-disturb >/dev/null 2>&1; fi
+    [ -n "$pw" ] && powerprofilesctl set "$pw" >/dev/null 2>&1
+  ) &
+  ( [ -n "$wall" ] && [ -r "$wall" ] && hyprctl hyprpaper wallpaper ",$wall" >/dev/null 2>&1
+    [ -n "$acc" ] && "$M2/scripts/m2res-accent" set "$acc" >/dev/null 2>&1 ) &
+  ( [ -n "$lay" ] && "$M2/scripts/m2res-preset" "$lay" >/dev/null 2>&1 ) &
+  ( case "$night" in on) night_on || "$M2/scripts/m2res-night" on >/dev/null 2>&1;; off) night_on && "$M2/scripts/m2res-night" off >/dev/null 2>&1;; esac ) &
+  wait; true
+}
+set_profile(){
+  local n=$1 v; case " $PROFILES " in *" $n "*) ;; *) echo "нет профиля: $n" >&2; exit 2;; esac
+  snap
+  g(){ v="P_${n}_$1"; echo "${!v:-}"; }
+  apply "$(g ACCENT)" "$(g WALL)" "$(g DND)" "$(g POWER)" "$(g LAYOUT)" "$(g NIGHT)" "$(g GAME)"
+  "$M2/scripts/m2res-bar" ensure; echo "$n" > "$CUR"; "$M2/scripts/m2res-bar" signal 11
+  notify-send -a Profile "Профиль: $n" -t 2000 2>/dev/null; echo "профиль: $n"
+}
+back(){
+  [ -f "$PREV" ] || { echo "нечего возвращать"; return 0; }
+  local j; j=$(cat "$PREV")
+  local ws; ws=$(jq -r .ws <<<"$j")
+  apply "$(jq -r .accent <<<"$j")" "" "$(jq -r .dnd <<<"$j")" "$(jq -r .power <<<"$j")" "" "$(jq -r .night <<<"$j")" "$(jq -r .game <<<"$j")"
+  [ "$(hyprctl -j activeworkspace | jq .id)" = "$ws" ] && [ -n "$(jq -r .layout <<<"$j")" ] && "$M2/scripts/m2res-preset" "$(jq -r .layout <<<"$j")" >/dev/null 2>&1
+  rm -f "$PREV" "$CUR"; "$M2/scripts/m2res-bar" signal 11; echo "профиль снят, состояние возвращено"
+}
+case "${1:-status}" in
+  status) cat "$CUR" 2>/dev/null || echo none;;
+  list) for p in $PROFILES; do echo "$p"; done;;
+  json) c=$(cat "$CUR" 2>/dev/null); [ -n "$c" ] && printf '{"text":"%s","class":"on","tooltip":"Профиль райса: %s (SUPER+CTRL+P — следующий)"}\n' "$c" "$c" || printf '{"text":"","class":"idle"}\n';;
+  cycle) c=$(cat "$CUR" 2>/dev/null); nx=""; first=""; take=0
+    for p in $PROFILES; do [ -z "$first" ] && first=$p; [ $take = 1 ] && { nx=$p; take=0; }; [ "$p" = "$c" ] && take=1; done
+    set_profile "${nx:-$first}";;
+  back) back;;
+  *) set_profile "$1";;
+esac

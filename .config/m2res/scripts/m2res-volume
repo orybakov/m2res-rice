@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# m2res-volume daemon|up|down|mute|show
+#   daemon — запустить фоновый ползунок у правого края (hover по краю экрана выдвигает его)
+#   up/down/mute — изменить громкость (wpctl) и показать ползунок; show — просто показать
+P="$HOME/.config/m2res/player/volume.py"
+S=@DEFAULT_AUDIO_SINK@
+running(){ pgrep -f "^python3 $P" >/dev/null; }
+daemon(){ running || { LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" >/tmp/m2res-volume.log 2>&1; return 1; }; }
+case "${1:-show}" in
+  daemon) daemon; exit 0;;
+  stop) pkill -f "^python3 $P"; exit 0;;
+  up)   wpctl set-mute $S 0; wpctl set-volume -l 1.0 $S 5%+;;
+  down) wpctl set-volume $S 5%-;;
+  mute) wpctl set-mute $S toggle;;
+  show) ;;
+  *) echo "usage: $0 daemon|stop|up|down|mute|show" >&2; exit 2;;
+esac
+daemon || sleep 0.8      # только что запущен — ждём, пока повесит обработчик сигнала
+pkill -USR1 -f "^python3 $P"

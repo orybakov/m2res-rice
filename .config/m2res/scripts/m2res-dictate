@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# m2res-dictate [toggle|start|stop|status] — голосовая диктовка, локальный Whisper (faster-whisper small, CPU, без облака).
+# SUPER+SHIFT+D: начать запись с микрофона → ещё раз: остановить, распознать и ВСТАВИТЬ текст в активное окно (Ctrl+V; в терминале Ctrl+Shift+V).
+# Прежнее содержимое буфера обмена возвращается. Язык определяется автоматически (M2_STT_LANG=ru|en — зафиксировать).
+# Для тестов: M2_DICT_WAV=файл.wav — не писать с микрофона, взять готовый файл; M2_DICT_NOPASTE=1 — только вывести текст.
+set -u
+W="$HOME/.local/share/m2res/whisper"; S="$HOME/.cache/m2res"; PIDF="$S/dictate.pid"; WAV="$S/dictate.wav"; mkdir -p "$S"
+sig(){ pkill -RTMIN+10 -x waybar 2>/dev/null; true; }
+running(){ [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+N(){ notify-send -a Dictation "$@"; }
+[ -x "$W/venv/bin/python" ] || { N "Диктовка не установлена" "нет $W/venv"; exit 1; }
+
+start(){
+  running && return 0
+  rm -f "$WAV"
+  setsid -f pw-record --rate 16000 --channels 1 --format s16 "$WAV" >/dev/null 2>&1 &
+  sleep 0.4; p=$(pgrep -nx pw-record) || { N "Диктовка" "не удалось открыть микрофон"; return 1; }
+  echo "$p" > "$PIDF"; date +%s > "$S/dictate.start"; N "🎙 Говори…" "SUPER+SHIFT+D — закончить" -t 1800; sig
+}
+
+stop(){
+  running || { rm -f "$PIDF"; return 0; }
+  kill -INT "$(cat "$PIDF")" 2>/dev/null; sleep 0.3; rm -f "$PIDF" "$S/dictate.start"; sig
+  transcribe "$WAV"
+}
+
+transcribe(){
+  local f="$1" txt
+  [ -s "$f" ] || { N "Диктовка" "запись пуста"; return 1; }
+  N "⏳ Распознаю…" -t 1500
+  txt=$("$W/venv/bin/python" "$W/stt.py" "$f" 2>/dev/null | tail -n1)
+  if [ -z "$txt" ]; then N "Диктовка" "речь не распознана"; return 1; fi
+  printf '%s\n' "$txt"
+  [ "${M2_DICT_NOPASTE:-0}" = 1 ] && return 0
+  local old cls mods
+  old=$(wl-paste -n 2>/dev/null || true)
+  printf '%s' "$txt" | wl-copy
+  cls=$(hyprctl -j activewindow | jq -r '(.class // "") + " " + (.pid|tostring)')
+  cls="$cls $(ps -o comm= -p "${cls##* }" 2>/dev/null)"
+  case "$cls" in *ghostty*|*kitty*|*foot*|*Alacritty*|*alacritty*|*wezterm*) mods="CTRL SHIFT";; *) mods="CTRL";; esac
+  sleep 0.15
+  hyprctl eval "hl.dispatch(hl.dsp.send_shortcut({ mods = '$mods', key = 'V' }))" >/dev/null 2>&1
+  sleep 0.4
+  if [ -n "$old" ]; then printf '%s' "$old" | wl-copy; else wl-copy --clear 2>/dev/null; fi
+}
+
+case "${1:-toggle}" in
+  start) start;;
+  stop) stop;;
+  toggle) if running; then stop; else start; fi;;
+  status) if running; then echo "rec $(( $(date +%s) - $(cat "$S/dictate.start") ))"; else echo off; fi;;
+  file) transcribe "${2:?usage: $0 file x.wav}";;
+esac

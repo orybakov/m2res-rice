@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# m2res-backup [make|list|restore <архив>|verify <архив>] — переносимый архив всего райса (без root).
+#   make     ~/Backups/m2res/m2res-ГГГГММДД-ЧЧММСС.tar.gz: ~/.config/m2res (без *.bak*, __pycache__), конфиги hypr/ghostty/sunsetr/waybar-связки,
+#            ~/.local/share/m2res/tessdata. Личные данные: журнал уведомлений (notifications.jsonl), статистика лаунчера — входят; M2_BACKUP_NODATA=1 — без них.
+#            История буфера (может содержать пароли) входит только при M2_BACKUP_CLIP=1.
+#            НЕ входят: venv и модель Whisper (~0.5 ГБ, ставятся m2res-install).
+#   restore  перед распаковкой делает страховочный архив текущего состояния (pre-restore), затем распаковывает поверх; hyprctl reload.
+#   verify   проверить целостность архива и показать содержимое верхнего уровня
+set -u
+D="$HOME/Backups/m2res"; mkdir -p "$D"
+PATHS=(.config/m2res .config/hypr/hyprland.lua .config/hypr/lua .config/hypr/hypridle.conf .config/hypr/hyprlock.conf .config/ghostty/config .config/sunsetr .local/share/m2res/tessdata)
+DATA=(.local/share/m2res/notifications.jsonl .local/share/m2res/notif_seen .local/share/m2res/launcher-usage.json)
+mk(){
+  local out="$D/${1:-m2res}-$(date +%Y%m%d-%H%M%S).tar.gz" ex=()
+  local all=("${PATHS[@]}"); [ "${M2_BACKUP_NODATA:-0}" = 1 ] || all+=("${DATA[@]}"); [ "${M2_BACKUP_CLIP:-0}" = 1 ] && all+=(.local/share/m2res/clipboard)
+  for p in "${all[@]}"; do [ -e "$HOME/$p" ] && ex+=("$p"); done
+  tar -C "$HOME" -czf "$out" --exclude='*.bak*' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' "${ex[@]}" || { echo "ошибка tar" >&2; return 1; }
+  echo "$out"
+}
+case "${1:-make}" in
+  make) mk m2res; ls -t "$D"/m2res-2*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f;;   # хранить 10 последних
+  list) ls -lh "$D" | tail -n +2;;
+  verify) f="${2:?usage: $0 verify архив}"; tar -tzf "$f" >/dev/null && echo "OK: $(tar -tzf "$f" | wc -l) файлов" && tar -tzf "$f" | cut -d/ -f1-3 | sort -u | head -12;;
+  restore)
+    f="${2:?usage: $0 restore архив}"; tar -tzf "$f" >/dev/null || { echo "архив повреждён" >&2; exit 1; }
+    s=$(mk pre-restore) && echo "страховка: $s"
+    tar -C "$HOME" -xzf "$f" && hyprctl reload >/dev/null 2>&1; echo "восстановлено из $f";;
+  *) echo "usage: $0 make|list|verify <архив>|restore <архив>" >&2; exit 2;;
+esac

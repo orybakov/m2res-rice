@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""m2res-autogame [daemon|stop|status] — автоматический игровой режим.
+Слушает события Hyprland (socket2). Если есть fullscreen-окно с классом из GAME_AUTO_CLASSES (game.conf) — вызывает `m2res-game on`;
+когда такого окна не стало (GAME_AUTO_OFF_DELAY секунд) — `m2res-game off`, но только если режим включил именно демон
+(метка ~/.cache/m2res/autogame.on). Вручную включённый режим не выключается."""
+import os, sys, re, json, socket, subprocess, time, signal, threading
+
+M2 = os.path.expanduser("~/.config/m2res"); CONF = M2 + "/game.conf"; GAME = M2 + "/scripts/m2res-game"
+MARK = os.path.expanduser("~/.cache/m2res/autogame.on"); PIDF = os.path.expanduser("~/.cache/m2res/autogame.pid")
+os.makedirs(os.path.dirname(MARK), exist_ok=True)
+
+
+def conf():
+    d = {"GAME_AUTO": "1", "GAME_AUTO_CLASSES": r"^(steam_app_[0-9]+|gamescope|.*\.exe)$", "GAME_AUTO_OFF_DELAY": "6"}
+    try:
+        for ln in open(CONF):
+            m = re.match(r"\s*(GAME_AUTO\w*)=(['\"]?)(.*?)\2\s*$", ln)
+            if m: d[m.group(1)] = m.group(3)
+    except OSError: pass
+    return d
+
+
+def game_on(): return subprocess.run([GAME, "status"], capture_output=True, text=True).stdout.strip() == "on"
+
+
+def game_windows(rx):
+    try: cl = json.loads(subprocess.run(["hyprctl", "-j", "clients"], capture_output=True, text=True, timeout=3).stdout)
+    except Exception: return None
+    return [c for c in cl if c.get("fullscreen", 0) and rx.search(c.get("class", "") or "")]
+
+
+def notify(t, b):
+    subprocess.Popen(["notify-send", "-a", "Game mode", t, b, "-t", "3500"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class Auto:
+    def __init__(self): self.off_at = None; self.lock = threading.Lock()
+
+    def check(self):
+        c = conf()
+        if c["GAME_AUTO"] != "1": return
+        try: rx = re.compile(c["GAME_AUTO_CLASSES"])
+        except re.error: return
+        w = game_windows(rx)
+        if w is None: return
+        with self.lock:
+            if w:
+                self.off_at = None
+                if not game_on():
+                    subprocess.run([GAME, "on"]); open(MARK, "w").write(w[0]["class"])
+                    notify("Игра: " + w[0]["class"], "игровой режим включён автоматически")
+            elif os.path.exists(MARK) and self.off_at is None:
+                self.off_at = time.monotonic() + float(c["GAME_AUTO_OFF_DELAY"] or 6)
+                threading.Timer(float(c["GAME_AUTO_OFF_DELAY"] or 6) + 0.2, self.check_off).start()
+
+    def check_off(self):
+        with self.lock:
+            if self.off_at is None or time.monotonic() < self.off_at or not os.path.exists(MARK): return
+        c = conf()
+        w = game_windows(re.compile(c["GAME_AUTO_CLASSES"]))
+        with self.lock:
+            if w: self.off_at = None; return
+            self.off_at = None
+            try: os.remove(MARK)
+            except OSError: pass
+            if game_on(): subprocess.run([GAME, "off"])
+
+
+def daemon():
+    open(PIDF, "w").write(str(os.getpid()))
+    a = Auto(); sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    path = f"{os.environ.get('XDG_RUNTIME_DIR', '/run/user/1000')}/hypr/{sig}/.socket2.sock"
+    while True:
+        try:
+            s = socket.socket(socket.AF_UNIX); s.connect(path); buf = b""; a.check()
+            while True:
+                d = s.recv(8192)
+                if not d: break
+                buf += d
+                while b"\n" in buf:
+                    ln, buf = buf.split(b"\n", 1); ev = ln.decode(errors="ignore").split(">>", 1)[0]
+                    if ev in ("fullscreen", "closewindow", "openwindow", "activewindowv2", "windowtitlev2", "movewindowv2"): a.check()
+        except Exception: pass
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "daemon"
+    if cmd == "daemon":
+        try:
+            os.kill(int(open(PIDF).read()), 0); print("уже запущен"); sys.exit(0)
+        except Exception: pass
+        if os.fork(): sys.exit(0)
+        os.setsid(); sys.stdout = sys.stderr = open("/tmp/m2res-autogame.log", "a"); daemon()
+    elif cmd == "stop":
+        try: os.kill(int(open(PIDF).read()), signal.SIGTERM); os.remove(PIDF)
+        except Exception: pass
+    elif cmd == "status":
+        try: os.kill(int(open(PIDF).read()), 0); print("daemon: работает; авто=" + conf()["GAME_AUTO"] + "; режим включил демон: " + ("да" if os.path.exists(MARK) else "нет"))
+        except Exception: print("daemon: не запущен")

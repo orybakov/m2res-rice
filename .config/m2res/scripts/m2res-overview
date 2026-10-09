@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# m2res-overview [toggle|start|stop] — обзор рабочих столов (SUPER+Tab): мини-карты окон, клик/цифра — перейти
+P="$HOME/.config/m2res/player/overview.py"
+running(){ pgrep -f "^python3 $P" >/dev/null; }
+start(){
+  running && return
+  local mon
+  mon=$(hyprctl -j monitors | jq -r --argjson c "$(hyprctl -j cursorpos)" '([.[]|select(.x<=$c.x and $c.x<.x+.width and .y<=$c.y and $c.y<.y+.height)][0] // (.[]|select(.focused))).name')
+  M2_MON="$mon" LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" >/tmp/m2res-overview.log 2>&1
+}
+case "${1:-toggle}" in
+  start) start;;
+  stop) pkill -f "^python3 $P";;
+  toggle) if running; then pkill -f "^python3 $P"; else start; fi;;
+esac

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Погода для waybar: иконка + температура. Источник: wttr.in (без ключа).
+t=$(curl -fsS -m 8 'https://wttr.in/?m&format=%t|%C' 2>/dev/null) || { echo '{"text":"󰖑 --"}'; exit 0; }
+temp=${t%%|*}; cond=${t#*|}
+case "${cond,,}" in
+  *sun*|*clear*) i="󰖙";; *rain*|*drizzle*|*shower*) i="󰖗";; *snow*) i="󰖘";;
+  *thunder*) i="󰖓";; *fog*|*mist*) i="󰖑";; *) i="󰖐";;
+esac
+printf '{"text":"%s %s","tooltip":"%s"}\n' "$i" "${temp// /}" "$cond"

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# m2res-game [toggle|on|off|status|info] — игровой режим (SUPER+CTRL+SHIFT+G и плитка GAME в Центре управления).
+# ВКЛ:  анимации/блюр/тени/скругления/отступы выкл, «не беспокоить», автоблокировка (hypridle) стоит, профиль питания performance,
+#       освобождение VRAM: останавливается hyprpaper (держит ~170–230 МБ; обои вернутся при выключении) +
+#       то, что перечислено в ~/.config/m2res/game.conf (юниты systemd, окна по классу) — по умолчанию пусто.
+# ВЫКЛ: возвращает то, что было ДО включения (состояние в ~/.cache/m2res/game.json): обои, юниты, настройки Hyprland.
+# Окна, закрытые через GAME_CLOSE_CLASSES, не восстанавливаются.
+set -u
+M2="$HOME/.config/m2res"; ST="$HOME/.cache/m2res/game.json"; CONF="${M2_GAME_CONF:-$M2/game.conf}"; SELF=$(readlink -f "$0")
+mkdir -p "$(dirname "$ST")"
+hl(){ hyprctl eval "$1" >/dev/null 2>&1; }
+opt(){ hyprctl getoption "$1" 2>/dev/null | head -1 | awk '{print $NF}'; }
+is_on(){ [ -f "$ST" ]; }
+vram(){ nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' '; }
+
+if [ ! -f "$CONF" ]; then cat > "$CONF" <<'EOF'
+# m2res-game: что дополнительно освобождать при включении игрового режима. Это обычный shell-файл.
+# Юниты systemd (user), которые остановить; при выключении поднимаются обратно, если были активны.
+# Локальная LLM держит ~10 ГБ VRAM — раскомментируйте, если нужно (перезагрузка модели занимает время):
+GAME_STOP_UNITS=""
+# Классы окон (hyprctl clients), которые вежливо закрыть. НЕ восстанавливаются, несохранённое может пропасть:
+GAME_CLOSE_CLASSES=""
+#GAME_CLOSE_CLASSES="org.telegram.desktop"
+# Останавливать hyprpaper (освобождает память GPU; на время игры фон — сплошной цвет): 1 — да, 0 — нет
+GAME_STOP_WALLPAPER=1
+EOF
+fi
+
+top_consumers(){   # «vivaldi-bin 699 MB, steamwebhelper 372 MB, …» — топ-3 по таблице процессов nvidia-smi
+  nvidia-smi 2>/dev/null | awk '/MiB/ && $2 ~ /^[0-9]+$/ && NF>=8 {print $5, $(NF-1)}' | while read -r pid mem; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue; n=$(ps -o comm= -p "$pid" 2>/dev/null | head -1); echo "${mem%MiB} ${n:-pid$pid}"
+  done | awk '{a[$2]+=$1} END{for(k in a) print a[k], k}' | sort -rn | head -3 | awk '{printf "%s%s %s MB", (NR>1?", ":""), $2, $1}'
+}
+
+report(){          # вызывается через пару секунд после включения: сколько реально освободилось
+  local v0=$1 v1 f
+  v1=$(vram); f=$(( v0 - v1 )); [ "$f" -lt 0 ] && f=0
+  is_on || return 0
+  jq --argjson f "$f" '.freed=$f' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST"
+  notify-send -a "Game mode" "Игровой режим включён" \
+    "VRAM: $(awk -v a="$v0" 'BEGIN{printf "%.1f", a/1024}') → $(awk -v a="$v1" 'BEGIN{printf "%.1f", a/1024}') ГБ (−$f МБ)
+тяжёлые: $(top_consumers)" -t 6000 2>/dev/null
+}
+
+on(){
+  is_on && return 0
+  GAME_STOP_UNITS=""; GAME_CLOSE_CLASSES=""; GAME_STOP_WALLPAPER=1
+  # shellcheck disable=SC1090
+  . "$CONF" 2>/dev/null
+  local anim blur shadow rounding gaps_in gaps_out bsize prof dnd idle v0 walls="" units=""
+  v0=$(vram); v0=${v0:-0}
+  anim=$(opt animations:enabled); blur=$(opt decoration:blur:enabled); shadow=$(opt decoration:shadow:enabled)
+  rounding=$(opt decoration:rounding); bsize=$(opt general:border_size)
+  gaps_in=$(hyprctl getoption general:gaps_in 2>/dev/null | awk '/css/{print $4}'); gaps_out=$(hyprctl getoption general:gaps_out 2>/dev/null | awk '/css/{print $4}')
+  prof=$(powerprofilesctl get 2>/dev/null || echo balanced)
+  makoctl mode 2>/dev/null | grep -qx do-not-disturb && dnd=1 || dnd=0
+  systemctl --user is-active --quiet hypridle && idle=1 || idle=0
+  if [ "$GAME_STOP_WALLPAPER" = 1 ] && pgrep -x hyprpaper >/dev/null; then
+    walls=$(hyprctl hyprpaper listactive 2>/dev/null | sed 's/^\([^:]*\): *\(.*\)$/\1,\2/' | tr '\n' '|')
+  fi
+  for u in ${GAME_STOP_UNITS:-}; do systemctl --user is-active --quiet "$u" && units="$units $u"; done
+  jq -nc --arg anim "$anim" --arg blur "$blur" --arg shadow "$shadow" --argjson rounding "${rounding:-5}" --argjson bsize "${bsize:-3}" \
+        --argjson gi "${gaps_in:-2}" --argjson go "${gaps_out:-4}" --arg prof "$prof" --argjson dnd "$dnd" --argjson idle "$idle" \
+        --arg walls "$walls" --arg units "${units# }" --argjson v0 "$v0" \
+        '{anim:$anim,blur:$blur,shadow:$shadow,rounding:$rounding,bsize:$bsize,gaps_in:$gi,gaps_out:$go,prof:$prof,dnd:$dnd,idle:$idle,walls:$walls,units:$units,v0:$v0,freed:0}' > "$ST"
+  hl 'hl.config({ animations = { enabled = false }, decoration = { rounding = 0, blur = { enabled = false }, shadow = { enabled = false } }, general = { gaps_in = 0, gaps_out = 0 } })'
+  makoctl mode -a do-not-disturb >/dev/null 2>&1
+  systemctl --user stop hypridle 2>/dev/null
+  powerprofilesctl set performance 2>/dev/null
+  # --- VRAM ---
+  [ -n "$walls" ] && pkill -x hyprpaper
+  for u in $units; do systemctl --user stop "$u" 2>/dev/null; done
+  for c in ${GAME_CLOSE_CLASSES:-}; do
+    for a in $(hyprctl -j clients | jq -r --arg c "$c" '.[]|select(.class==$c)|.address'); do
+      hl "hl.dispatch(hl.dsp.window.close({ window = 'address:$a' }))"
+    done
+  done
+  setsid -f bash -c "sleep 2.5; exec '$SELF' _report $v0" >/dev/null 2>&1
+}
+
+off(){
+  is_on || return 0
+  local j walls; j=$(cat "$ST")
+  g(){ echo "$j" | jq -r ".$1"; }
+  hl "hl.config({ animations = { enabled = $(g anim) }, decoration = { rounding = $(g rounding), blur = { enabled = $(g blur) }, shadow = { enabled = $(g shadow) } }, general = { gaps_in = $(g gaps_in), gaps_out = $(g gaps_out) } })"
+  [ "$(g dnd)" = 1 ] || makoctl mode -r do-not-disturb >/dev/null 2>&1
+  [ "$(g idle)" = 1 ] && systemctl --user start hypridle 2>/dev/null
+  powerprofilesctl set "$(g prof)" 2>/dev/null
+  for u in $(g units); do systemctl --user start "$u" 2>/dev/null; done
+  walls=$(g walls)
+  if [ -n "$walls" ]; then
+    pgrep -x hyprpaper >/dev/null || setsid -f hyprpaper >/dev/null 2>&1
+    for _ in $(seq 1 25); do hyprctl hyprpaper listactive >/dev/null 2>&1 && break; sleep 0.2; done
+    sleep 0.4
+    echo "$walls" | tr '|' '\n' | while IFS= read -r l; do [ -n "$l" ] && hyprctl hyprpaper wallpaper "$l" >/dev/null 2>&1; done
+  fi
+  rm -f "$ST"
+  notify-send -a "Game mode" "Игровой режим выключен" "всё возвращено как было" -t 2500 2>/dev/null
+}
+
+case "${1:-toggle}" in
+  on) on;; off) off;;
+  toggle) if is_on; then off; else on; fi;;
+  status) if is_on; then echo on; else echo off; fi;;
+  info) if is_on; then jq -r '"freed=\(.freed) v0=\(.v0)"' "$ST"; else echo off; fi;;
+  top) top_consumers;;
+  _report) report "${2:-0}";;
+  *) echo "usage: $0 toggle|on|off|status|info" >&2; exit 2;;
+esac

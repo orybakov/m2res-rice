@@ -1,0 +1,14 @@
+# m2res: отдельный конфиг matugen. Запуск: m2res-theme <картинка>
+[config]
+
+[templates.m2res-waybar]
+input_path  = '~/.config/m2res/matugen/colors.css'
+output_path = '~/.config/m2res/waybar/colors.css'
+
+[templates.m2res-lock]
+input_path  = '~/.config/m2res/matugen/colors.conf'
+output_path = '~/.config/m2res/lock/colors.conf'
+
+[templates.m2res-player]
+input_path  = '~/.config/m2res/matugen/colors.json'
+output_path = '~/.config/m2res/player/colors.json'

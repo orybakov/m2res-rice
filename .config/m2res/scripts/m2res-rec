@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# m2res-rec [toggle|screen|area|stop|status|json] — запись экрана через gpu-screen-recorder (NVENC), индикатор в Waybar (custom/rec).
+#   screen  монитор под курсором · area  область (slurp) · stop  остановить и сохранить · toggle  старт «screen» либо стоп · json  для Waybar
+# Файлы: ~/Videos/Recordings/rec-ГГГГ-ММ-ДД_ЧЧ-ММ-СС.mp4 · звук: системный (default_output); M2_REC_AUDIO="" — без звука.
+# Для тестов: M2_REC_BIN — другой рекордер, M2_REC_DIR — другая папка.
+set -u
+BIN="${M2_REC_BIN:-gpu-screen-recorder}"; DIR="${M2_REC_DIR:-$HOME/Videos/Recordings}"; AUDIO="${M2_REC_AUDIO-default_output}"
+S="$HOME/.cache/m2res"; PIDF="$S/rec.pid"; STF="$S/rec.start"; OUTF="$S/rec.out"; mkdir -p "$S" "$DIR"
+sig(){ pkill -RTMIN+10 -x waybar 2>/dev/null; true; }
+running(){ [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; }
+ACC=$(jq -r '.accent // "#b0d500"' "$HOME/.config/m2res/player/colors.json" 2>/dev/null || echo "#b0d500")
+
+start(){
+  running && return 0
+  command -v "$BIN" >/dev/null || { notify-send -a Recorder "Запись недоступна" "не найден $BIN"; return 1; }
+  local what="$1" target out="$DIR/rec-$(date +%F_%H-%M-%S).mp4" g
+  if [ "$what" = area ]; then
+    g=$(slurp -d -b '#000000a0' -c "${ACC}ff" -s "${ACC}22" -w 2 -f '%wx%h+%x+%y') || return 0
+    target="$g"
+  else
+    target=$(hyprctl -j monitors | jq -r --argjson c "$(hyprctl -j cursorpos)" '([.[]|select(.x<=$c.x and $c.x<.x+.width and .y<=$c.y and $c.y<.y+.height)][0] // .[0]).name')
+  fi
+  local args=(-w "$target" -f 60 -q very_high -cursor yes -o "$out")
+  [ -n "$AUDIO" ] && args+=(-a "$AUDIO")
+  setsid -f "$BIN" "${args[@]}" >"$S/rec.log" 2>&1 &
+  sleep 0.6
+  local p; p=$(pgrep -nf -- "$out") || p=""
+  if [ -z "$p" ] || ! kill -0 "$p" 2>/dev/null; then
+    notify-send -a Recorder "Запись не началась" "$(tail -n1 "$S/rec.log" | cut -c1-120)"; return 1
+  fi
+  echo "$p" > "$PIDF"; date +%s > "$STF"; echo "$out" > "$OUTF"
+  notify-send -a Recorder "● Запись пошла" "SUPER+SHIFT+R — стоп" -t 2000; sig
+}
+
+stop(){
+  running || { rm -f "$PIDF" "$STF"; sig; return 0; }
+  local p out; p=$(cat "$PIDF"); out=$(cat "$OUTF" 2>/dev/null)
+  kill -INT "$p" 2>/dev/null
+  for _ in $(seq 1 50); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+  kill -0 "$p" 2>/dev/null && kill -KILL "$p" 2>/dev/null
+  rm -f "$PIDF" "$STF"; sig
+  if [ -s "$out" ]; then
+    printf '%s' "file://$out" | wl-copy --type text/uri-list 2>/dev/null
+    notify-send -a Recorder "Запись сохранена" "$(basename "$out") · $(du -h "$out" | cut -f1)" -t 5000
+  else notify-send -a Recorder "Запись пуста" "файл не создан"; fi
+}
+
+case "${1:-toggle}" in
+  screen) start screen;;
+  area)   start area;;
+  stop)   stop;;
+  toggle) if running; then stop; else start screen; fi;;
+  status) if running; then echo "rec $(( $(date +%s) - $(cat "$STF") ))"; else echo off; fi;;
+  json)
+    if running; then t=$(( $(date +%s) - $(cat "$STF") )); printf '{"text":"● REC %02d:%02d","class":"rec","tooltip":"Идёт запись. Клик — стоп (SUPER+SHIFT+R)"}\n' $((t/60)) $((t%60))
+    elif [ -f "$S/dictate.pid" ] && kill -0 "$(cat "$S/dictate.pid")" 2>/dev/null; then printf '{"text":"● MIC","class":"rec","tooltip":"Диктовка: говори, SUPER+SHIFT+D — закончить"}\n'
+    else printf '{"text":"","class":"idle"}\n'; fi;;
+esac

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# m2res-install [check|packages|user] — зависимости райса (Arch Linux).
+#   check     что установлено, чего нет; ничего не меняет
+#   packages  поставить всё недостающее: pacman + AUR. Спросит пароль sudo один раз.
+#             Нет AUR-помощника — сначала соберёт yay (base-devel, git), потом поставит AUR-пакеты.
+#             M2_YES=1 — не задавать вопросов.
+#   user      без root: venv с faster-whisper + модель small, rus.traineddata для tesseract
+set -u
+M2="$HOME/.config/m2res"; W="$HOME/.local/share/m2res"
+# Пакеты Arch. Где репозиторий, а где AUR — определяется на лету (pacman -Si), список один.
+PKGS=(hyprland hyprpaper hyprlock hypridle waybar mako grim slurp wl-clipboard hyprpicker
+      tesseract tesseract-data-eng zbar qrencode ffmpeg imagemagick jq gpu-screen-recorder
+      wireplumber libpulse libnotify ghostty satty uv python python-gobject gtk4 gtk4-layer-shell
+      playerctl power-profiles-daemon uwsm nautilus matugen libqalculate networkmanager bluez-utils
+      btop curl bc git xdg-utils ttf-cascadia-mono-nerd sunsetr google-chrome)
+# видеокарта NVIDIA → нужен nvidia-smi для полосок GPU/VRAM
+for v in /sys/bus/pci/devices/*/vendor; do [ -r "$v" ] && [ "$(cat "$v")" = 0x10de ] && { PKGS+=(nvidia-utils); break; }; done
+YES="${M2_YES:-0}"
+ask(){ [ "$YES" = 1 ] && return 0; [ -t 0 ] || return 0; read -r -p "$1 [Y/n] " r; [[ ! "$r" =~ ^[nNнН] ]]; }
+missing(){ pacman -T "${PKGS[@]}" 2>/dev/null; }          # pacman -T учитывает provides и версии
+check(){
+  command -v pacman >/dev/null || { echo "  не Arch (нет pacman): поставьте вручную: ${PKGS[*]}"; return 4; }
+  local m; m=$(missing); local p
+  for p in "${PKGS[@]}"; do if grep -qx -- "$p" <<<"$m"; then printf '  НЕТ  %s\n' "$p"; else printf '  ok   %s\n' "$p"; fi; done
+  python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Gtk4LayerShell','1.0')" 2>/dev/null && echo "  ok   gtk4 + gtk4-layer-shell (python)" || echo "  НЕТ  python-gobject / gtk4-layer-shell"
+  [ -d "$M2/player/vendor" ] && echo "  ok   vendor (cairo)" || echo "  НЕТ  player/vendor (cairo) — восстановите из бэкапа"
+  [ -x "$W/whisper/venv/bin/python" ] && echo "  ok   whisper venv" || echo "  нет  whisper venv  → m2res-install user"
+  [ -r "$W/tessdata/rus.traineddata" ] && echo "  ok   rus.traineddata" || echo "  нет  rus.traineddata  → m2res-install user"
+  [ -n "$m" ] && { echo; echo "Не хватает пакетов: $(echo $m | tr '\n' ' ')  → m2res-install packages"; return 3; }
+  return 0
+}
+pac(){ sudo pacman -S --needed --noconfirm "$@"; }
+sudo_start(){
+  [ "$(id -u)" = 0 ] && { echo "Запустите от обычного пользователя, не от root: AUR-пакеты от root не собираются. Пароль спросит sudo." >&2; exit 1; }
+  command -v sudo >/dev/null || { echo "Нужен sudo (pacman -S sudo от root и добавьте себя в группу wheel)." >&2; exit 1; }
+  echo "Сейчас попросит пароль — это пароль вашего пользователя (для sudo). Символы при вводе не видны, это нормально."
+  sudo -v || { echo "sudo не принял пароль или у вас нет прав." >&2; exit 1; }
+  ( while kill -0 $$ 2>/dev/null; do sudo -n true 2>/dev/null; sleep 45 & wait $!; done ) >/dev/null 2>&1 & KEEP=$!
+  trap 'pkill -P $KEEP 2>/dev/null; kill $KEEP 2>/dev/null' EXIT
+}
+aur_helper(){ local h; for h in yay paru; do command -v $h >/dev/null && { echo $h; return 0; }; done; return 1; }
+bootstrap_yay(){
+  echo "AUR-помощника нет — ставлю yay (сначала base-devel и git)…"
+  pac base-devel git || return 1
+  local d rc; d=$(mktemp -d)
+  git clone --depth 1 https://aur.archlinux.org/yay-bin.git "$d/yay-bin" && ( cd "$d/yay-bin" && makepkg -si --noconfirm ); rc=$?
+  rm -rf "$d"; return $rc
+}
+packages(){
+  command -v pacman >/dev/null || { echo "Это не Arch Linux (нет pacman). Поставьте вручную: ${PKGS[*]}" >&2; return 4; }
+  local m; m=$(missing)
+  [ -z "$m" ] && { echo "Все пакеты уже установлены."; services; return 0; }
+  echo "Нужно поставить: $(echo $m | tr '\n' ' ')"
+  ask "Установить сейчас?" || { echo "Отменено."; return 3; }
+  sudo_start
+  # свежая система без баз пакетов: pacman -Si ничего не найдёт — синхронизируемся (полное обновление, как рекомендует Arch)
+  ls /var/lib/pacman/sync/*.db >/dev/null 2>&1 || sudo pacman -Syu --noconfirm
+  local off=() aur=() p
+  for p in $m; do if pacman -Si "$p" >/dev/null 2>&1; then off+=("$p"); else aur+=("$p"); fi; done
+  if [ ${#off[@]} -gt 0 ]; then
+    echo; echo "== pacman: ${off[*]}"
+    pac "${off[@]}" || { echo "pacman не справился — база пакетов устарела? Делаю полное обновление и пробую ещё раз…"; sudo pacman -Syu --noconfirm && pac "${off[@]}"; } || echo "ПРЕДУПРЕЖДЕНИЕ: часть официальных пакетов не встала" >&2
+  fi
+  if [ ${#aur[@]} -gt 0 ]; then
+    echo; echo "== AUR: ${aur[*]}"
+    local h; h=$(aur_helper) || { bootstrap_yay && h=yay; } || { echo "ПРЕДУПРЕЖДЕНИЕ: yay не собрался, AUR-пакеты (${aur[*]}) пропущены" >&2; h=""; }
+    case "$h" in
+      yay)  yay -S --needed --noconfirm --answerclean None --answerdiff None --answeredit None --removemake --sudoloop "${aur[@]}" ;;
+      paru) paru -S --needed --noconfirm --skipreview --sudoloop "${aur[@]}" ;;
+    esac || echo "ПРЕДУПРЕЖДЕНИЕ: часть AUR-пакетов не встала" >&2
+  fi
+  services
+  m=$(missing); echo
+  if [ -n "$m" ]; then echo "Не встало: $(echo $m | tr '\n' ' ')"; return 3; fi
+  echo "Все пакеты на месте."
+}
+services(){   # powerprofilesctl (профили питания) требует демона; не трогаем, если стоит tlp/auto-cpufreq
+  command -v systemctl >/dev/null && pacman -Qq power-profiles-daemon >/dev/null 2>&1 || return 0
+  systemctl is-active --quiet power-profiles-daemon && return 0
+  pacman -Qq tlp auto-cpufreq >/dev/null 2>&1 && return 0
+  sudo -n true 2>/dev/null || return 0
+  sudo systemctl enable --now power-profiles-daemon >/dev/null 2>&1 && echo "включён power-profiles-daemon"
+}
+user(){
+  mkdir -p "$W/tessdata" "$W/whisper"
+  [ -r "$W/tessdata/eng.traineddata" ] || cp /usr/share/tessdata/eng.traineddata "$W/tessdata/" 2>/dev/null
+  [ -r "$W/tessdata/rus.traineddata" ] || curl -fsSL -m 120 -o "$W/tessdata/rus.traineddata" https://github.com/tesseract-ocr/tessdata_fast/raw/main/rus.traineddata && echo "rus.traineddata ок"
+  if [ ! -x "$W/whisper/venv/bin/python" ]; then
+    uv venv --python 3.12 "$W/whisper/venv" -q && VIRTUAL_ENV="$W/whisper/venv" uv pip install -q faster-whisper "av==15.1.0" && echo "venv ок"
+  fi
+  [ -r "$W/whisper/stt.py" ] || echo "нет stt.py — восстановите из бэкапа (m2res-backup restore)"
+  "$W/whisper/venv/bin/python" -c "
+from faster_whisper import WhisperModel; import os
+WhisperModel('small', device='cpu', compute_type='int8', download_root=os.path.expanduser('~/.local/share/m2res/whisper/models')); print('модель ок')"
+}
+case "${1:-check}" in check) check;; packages) packages;; user) user;; *) echo "usage: $0 check|packages|user" >&2; exit 2;; esac

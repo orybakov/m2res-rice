@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# m2res-notify-sound [test] — один звук на все уведомления (вызывается хуком mako on-notify).
+# Настройки: ~/.config/m2res/notify-sound.conf   file=<звук>  volume=<0.0–1.0>  enabled=1|0
+#   file_critical / volume_critical — красные (critical);  file_low / volume_low — тихие (low)
+# Проверка: m2res-notify-sound test [critical|low]   |   прослушать файл: m2res-notify-sound preview <имя из sounds/ или путь>
+# Не играет: в режиме «не беспокоить», для OSD яркости, чаще чем раз в 400 мс.
+CONF="$HOME/.config/m2res/notify-sound.conf"; STAMP="${XDG_RUNTIME_DIR:-/tmp}/m2res-notify-sound.ts"
+S=/usr/share/sounds/freedesktop/stereo
+file=$S/message-new-instant.oga; volume=0.7; enabled=1; file_critical=$S/dialog-warning.oga; volume_critical=0.85; file_low=''; volume_low=0.6
+[ -f "$CONF" ] && while IFS='=' read -r k v; do
+  case "$k" in file) file="${v/#\~/$HOME}";; volume) volume="$v";; enabled) enabled="$v";;
+    file_low) file_low="${v/#\~/$HOME}";; volume_low) volume_low="$v";;
+    file_critical) file_critical="${v/#\~/$HOME}";; volume_critical) volume_critical="$v";; esac
+done < <(grep -v '^[[:space:]]*#' "$CONF")
+urg=normal
+if [ "${1:-}" = preview ]; then
+  f="${2:?usage: m2res-notify-sound preview <name|path>}"; [ -r "$f" ] || f="$HOME/.config/m2res/sounds/${f%.wav}.wav"
+  [ -r "$f" ] || { echo "нет файла: $2" >&2; exit 1; }
+  exec paplay --volume=45875 "$f"
+elif [ "${1:-}" = test ]; then urg=${2:-normal}
+else
+  [ "$enabled" = 1 ] || exit 0
+  makoctl mode 2>/dev/null | grep -qx 'do-not-disturb' && exit 0
+  cur=$(makoctl list -j 2>/dev/null | jq -r '(max_by(.id) // {}) | "\((.urgency // "normal"))|\(.summary // "")"')
+  [ "${cur#*|}" = Brightness ] && exit 0
+  urg=${cur%%|*}
+  now=$(date +%s%3N); last=$(cat "$STAMP" 2>/dev/null || echo 0)
+  # красные не глушим антидребезгом обычных звуков
+  [ "$urg" != critical ] && [ $((now - last)) -lt 400 ] && exit 0; echo "$now" > "$STAMP"
+fi
+[ "$urg" = critical ] && { file=$file_critical; volume=$volume_critical; }
+[ "$urg" = low ] && [ -n "$file_low" ] && { file=$file_low; volume=$volume_low; }
+[ -r "$file" ] || { echo "нет файла звука: $file" >&2; exit 1; }
+vol=$(awk -v v="$volume" 'BEGIN{printf "%d", (v<0?0:(v>1?1:v))*65536}')
+setsid -f paplay --volume="$vol" "$file" >/dev/null 2>&1

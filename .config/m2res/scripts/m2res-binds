@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""m2res-binds [list|json|dups] — разбор биндов Hyprland из ~/.config/hypr/lua/*.lua и ~/.config/m2res/hypr-m2res.lua.
+list — таблица «клавиши → действие»; json — для шпаргалки (SUPER+F1); dups — дубликаты (код 1, если есть)."""
+import sys, os, re, glob, json
+
+FILES = sorted(glob.glob(os.path.expanduser("~/.config/hypr/lua/*.lua"))) + [os.path.expanduser("~/.config/m2res/hypr-m2res.lua")]
+NAMES = {  # человеческие названия для известных команд
+    "m2res-center": "Центр уведомлений", "m2res-control": "Центр управления", "m2res-wallpick": "Выбор обоев", "m2res-player": "Плеер",
+    "m2res-launcher": "Лаунчер приложений", "m2res-launch": "Лаунчер приложений", "m2res-power": "Меню выключения", "m2res-clip": "История буфера обмена",
+    "m2res-clipboard": "История буфера обмена", "m2res-switch": "Переключатель окон", "m2res-shot": "Скриншот", "m2res-game": "Игровой режим",
+    "m2res-calendar": "Календарь и таймер", "m2res-dock": "Боковая панель (32:9)", "m2res-profile": "Профиль райса: следующий", "m2res-preset": "Раскладка стола: по кругу", "m2res-dictate": "Голосовая диктовка (Whisper)", "m2res-cheat": "Шпаргалка по биндам", "m2res-tools ocr": "OCR: текст с экрана в буфер", "m2res-tools color": "Пипетка цвета", "m2res-tools qr": "Прочитать QR с экрана", "m2res-tools qrgen": "QR-код из буфера обмена", "m2res-rec": "Запись экрана", "m2res-drop": "Выпадающий терминал", "m2res-overview": "Обзор рабочих столов", "m2res-night": "Ночной свет вкл/выкл (авто по закату)", "m2res-binds": "Шпаргалка по биндам", "ghostty": "Терминал",
+    "vivaldi": "Браузер Vivaldi", "google-chrome-stable": "Браузер Chrome", "nautilus": "Файлы", "m2res-layout": "Раскладка клавиатуры",
+}
+DSP = {"window.close": "Закрыть окно", "window.fullscreen": "Полный экран", "window.float": "Плавающее окно вкл/выкл", "group.toggle": "Группа окон вкл/выкл",
+       "window.swap": "Поменять окно местами", "window.resize": "Изменить размер окна", "window.move": "Переместить окно", "layout": "Раскладка (layout msg)", "focus": "Фокус"}
+DIRS = {"left": "влево", "right": "вправо", "up": "вверх", "down": "вниз", "l": "влево", "r": "вправо", "u": "вверх", "d": "вниз"}
+
+
+def balanced(s, i):
+    """s[i] == '(' → индекс закрывающей скобки, учитывая строки"""
+    d, q, j = 0, None, i
+    while j < len(s):
+        c = s[j]
+        if q:
+            if c == "\\": j += 1
+            elif c == q: q = None
+        elif c in "\"'": q = c
+        elif c == "(": d += 1
+        elif c == ")":
+            d -= 1
+            if d == 0: return j
+        j += 1
+    return -1
+
+
+def strings(expr): return re.findall(r'"((?:[^"\\]|\\.)*)"', expr)
+
+
+SPECIAL = {"m2res-night": "Ночной свет вкл/выкл (авто по закату)", "steam-gaming-mode": "Steam: игровой режим (стол gaming)", "steam-desktop-mode": "Steam: обратно на рабочий стол",
+           "hyprlock": "Заблокировать экран", "swayosd-client": "Громкость / медиа",
+           "walker": "Walker (меню)"}
+SHOT = {"area": "Скриншот области", "edit": "Скриншот области + редактор", "screen": "Скриншот экрана", "window": "Скриншот окна"}
+WS = {"m+1": "Следующий рабочий стол", "m-1": "Предыдущий рабочий стол", "empty": "Первый пустой рабочий стол"}
+
+
+def describe(act):
+    act = re.sub(r'os\.getenv\("HOME"\)', '"~"', act)
+    act = re.sub(r'\bshot\s*\.\.', '"m2res-shot "..', act)
+    low = " ".join(strings(act))
+    if "function()" in act:
+        ex = re.search(r'exec_cmd\((.*?)\)\s*end', act, re.S)
+        if ex:
+            c = " ".join(strings(ex.group(1))); return SPECIAL.get(os.path.basename(c.split()[-1]) if c.split() else "", NAMES.get(os.path.basename(c), c))
+    if "m2res-shot" in low:
+        k = low.split()[-1]; return SHOT.get(k, "Скриншот")
+    w = re.search(r'workspace\s*=\s*"([^"]+)"', act)
+    if w and "focus" in act and w.group(1) in WS: return WS[w.group(1)]
+    if "swayosd-client" in low:
+        return ("Громкость +" if "raise" in low or "volume +" in low or "--output-volume +" in low else "Громкость −" if "--output-volume -" in low or "lower" in low else
+                "Без звука" if "mute" in low else "Медиа: " + low.split("--playerctl")[-1].strip()) if "--output-volume" in low or "playerctl" in low else "Яркость / OSD"
+    return describe_old(act)
+
+
+def describe_old(act):
+    m = re.search(r"exec_cmd\((.*)\)\s*$", act, re.S)
+    if m:
+        cmd = "".join(strings(m.group(1)))
+        cmd = re.sub(r"^uwsm app -- ", "", cmd.strip())
+        first = os.path.basename(cmd.split()[0]) if cmd.split() else cmd
+        args = " ".join(cmd.split()[1:])
+        TOOLS = {"ocr": "OCR: текст с экрана в буфер", "color": "Пипетка цвета", "qr": "Прочитать QR с экрана", "qrgen": "QR-код из буфера обмена"}
+        if first == "m2res-tools" and args in TOOLS: return TOOLS[args]
+        if first == "m2res-rec" and args == "area": return "Запись экрана: область"
+        base = SPECIAL.get(first, NAMES.get(first, first))
+        if first == "walker": base = "Walker: " + (args.split("-m ")[-1].split()[0] if "-m " in args else "меню")
+        if first == "ghostty" and "--class" in args: base = SPECIAL.get(os.path.basename(cmd.split("-e")[-1].split()[0]), "Терминал")
+        return f"{base} ({args})" if args and first.startswith("m2res") and args not in ("toggle",) else base
+    m = re.match(r"hl\.dsp\.([a-z_.]+)\((.*)\)\s*$", act.strip(), re.S)
+    if m:
+        name, body = m.group(1), m.group(2)
+        ws = re.search(r"workspace\s*=\s*(\w+)", body)
+        if name == "focus" and ws: return "Перейти на рабочий стол " + ("N" if not ws.group(1).isdigit() else ws.group(1))
+        if name == "window.move" and ws: return "Окно на рабочий стол N"
+        if name == "window.resize":
+            x, y = re.search(r"x\s*=\s*(-?\d+)", body), re.search(r"y\s*=\s*(-?\d+)", body)
+            return "Размер окна: " + ("шире" if x and int(x.group(1)) > 0 else "уже" if x and int(x.group(1)) < 0 else "ниже" if y and int(y.group(1)) > 0 else "выше")
+        d = re.search(r'direction\s*=\s*"(\w+)"', body) or re.search(r'dir\w*\s*=\s*"(\w+)"', body)
+        if name == "focus" and d: return "Фокус окна " + DIRS.get(d.group(1), d.group(1))
+        if name == "window.fullscreen":
+            md = re.search(r'mode\s*=\s*"(\w+)"', body); return "Полный экран" if not md or md.group(1) == "fullscreen" else "Развернуть (maximize)"
+        if name == "layout": return {"togglesplit": "Сменить направление сплита", "swapsplit": "Поменять половины сплита"}.get((strings(body) or [""])[0], "Раскладка: " + (strings(body) or [""])[0])
+        return DSP.get(name, name) + (f" {DIRS.get(d.group(1), d.group(1))}" if d else "")
+    return " ".join(act.split())[:50]
+
+
+def top_arg(a):
+    """первый аргумент верхнего уровня (отрезает таблицу опций вроде { repeating = true })"""
+    d, q = 0, None
+    for i, c in enumerate(a):
+        if q:
+            if c == q: q = None
+        elif c in "\"'": q = c
+        elif c in "({[": d += 1
+        elif c in ")}]": d -= 1
+        elif c == "," and d == 0: return a[:i].strip()
+    return a
+
+
+def parse():
+    out = []
+    for f in FILES:
+        try: s = open(f).read()
+        except OSError: continue
+        for m in re.finditer(r"\bhl\.bind\(", s):
+            end = balanced(s, m.end() - 1)
+            if end < 0: continue
+            body = s[m.end():end]
+            # первый аргумент — до первой запятой вне строк
+            q, j = None, 0
+            while j < len(body):
+                c = body[j]
+                if q:
+                    if c == "\\": j += 1
+                    elif c == q: q = None
+                elif c in "\"'": q = c
+                elif c == ",": break
+                j += 1
+            combo_expr, act = body[:j].strip(), body[j + 1:].strip().rstrip(",").strip()
+            act = top_arg(act)
+            if not combo_expr.startswith('"') and not combo_expr.startswith("'"): continue
+            combo = re.sub(r'"\s*\.\.\s*\w+\s*$', '[0-9]"', combo_expr)
+            combo = " ".join(strings(combo)) if '[0-9]' in combo else (strings(combo_expr) or [combo_expr])[0]
+            combo = re.sub(r"\s*\+\s*", "+", combo.replace("[0-9]", "0-9")).strip()
+            line = s.count("\n", 0, m.start()) + 1
+            out.append({"keys": combo, "action": describe(act), "file": os.path.basename(f), "line": line,
+                        "raw": " ".join(act.split())[:120]})
+    return out
+
+
+def norm(k):
+    parts = [p.strip().upper() for p in k.split("+")]
+    mods = sorted(p for p in parts[:-1]); return "+".join(mods + [parts[-1]])
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
+    b = parse()
+    if cmd == "json":
+        cnt = {}
+        for x in b:
+            x["_k"] = x["keys"] if "0-9" in x["keys"] else norm(x["keys"]); cnt[x["_k"]] = cnt.get(x["_k"], 0) + 1
+        for x in b: x["dup"] = cnt[x.pop("_k")] > 1
+        print(json.dumps(b, ensure_ascii=False))
+    elif cmd == "dups":
+        seen, bad = {}, 0
+        for x in b:
+            k = norm(x["keys"]) if "0-9" not in x["keys"] else x["keys"]
+            if k in seen:
+                print(f"ДУБЛЬ {x['keys']}: {seen[k]['file']}:{seen[k]['line']} ({seen[k]['action']}) ↔ {x['file']}:{x['line']} ({x['action']})"); bad += 1
+            else: seen[k] = x
+        print(f"биндов: {len(b)}, дубликатов: {bad}"); sys.exit(1 if bad else 0)
+    else:
+        for x in b: print(f"{x['keys']:<28} {x['action']:<40} {x['file']}:{x['line']}")

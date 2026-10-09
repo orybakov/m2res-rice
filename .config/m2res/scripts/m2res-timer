@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# m2res-timer start <сек|5m|1h30m|90s> [название] | pause | resume | stop | status | waybar
+# Состояние: ~/.cache/m2res/timer.json   {"state":"running","end":epoch,"total":N,"label":""}  |  {"state":"paused","left":N,...}
+# По окончании: критическое уведомление + звук (звук играет даже в «не беспокоить» — это будильник, который вы сами завёли).
+# Ожидание — отдельный процесс (переживает закрытие виджета); для тестов M2_TIMER_SILENT=1 отключает звук.
+set -u
+D="$HOME/.cache/m2res"; mkdir -p "$D"; ST="$D/timer.json"; PIDF="$D/timer.pid"
+SND="$HOME/.config/m2res/sounds/critical-alarm.wav"
+
+parse(){   # 90 | 90s | 5m | 1h30m | 1:30 (мин:сек) → секунды
+  local s="$1" t=0 n
+  if [[ "$s" =~ ^[0-9]+$ ]]; then echo "$s"; return; fi
+  if [[ "$s" =~ ^([0-9]+):([0-9]{1,2})$ ]]; then echo $(( ${BASH_REMATCH[1]}*60 + 10#${BASH_REMATCH[2]} )); return; fi
+  while [[ "$s" =~ ^([0-9]+)([hms])(.*)$ ]]; do
+    n=${BASH_REMATCH[1]}; case ${BASH_REMATCH[2]} in h) t=$((t+n*3600));; m) t=$((t+n*60));; s) t=$((t+n));; esac; s=${BASH_REMATCH[3]}
+  done
+  [ -z "$s" ] && [ "$t" -gt 0 ] && echo "$t" || return 1
+}
+kill_waiter(){ [ -f "$PIDF" ] && { local p; p=$(cat "$PIDF"); pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; rm -f "$PIDF"; }; return 0; }
+spawn_waiter(){   # $1 = секунды, $2 = название
+  kill_waiter
+  local label="${2:-}"
+  setsid -f bash -c '
+    echo $$ > "$1"; sleep "$2"
+    rm -f "$1"; echo "{\"state\":\"done\",\"total\":$3,\"label\":\"$4\"}" > "$5"
+    notify-send -u critical -a Timer "Таймер: время вышло" "${4:-$(( $3 / 60 )) мин}"
+    [ -z "${M2_TIMER_SILENT:-}" ] && paplay --volume=52000 "$6" 2>/dev/null
+  ' _ "$PIDF" "$1" "$TOTAL" "$label" "$ST" "$SND" >/dev/null 2>&1
+}
+now(){ date +%s; }
+get(){ jq -r "$1" "$ST" 2>/dev/null; }
+
+case "${1:-status}" in
+  start)
+    sec=$(parse "${2:?usage: m2res-timer start 25m [название]}") || { echo "не понял время: $2" >&2; exit 2; }
+    TOTAL=$sec; label="${3:-}"
+    jq -nc --argjson e "$(( $(now) + sec ))" --argjson t "$sec" --arg l "$label" '{state:"running",end:$e,total:$t,label:$l}' > "$ST"
+    spawn_waiter "$sec" "$label" ;;
+  pause)
+    [ "$(get .state)" = running ] || exit 0
+    left=$(( $(get .end) - $(now) )); [ "$left" -lt 1 ] && left=1; kill_waiter
+    jq -c --argjson l "$left" '{state:"paused",left:$l,total:.total,label:.label}' "$ST" > "$ST.tmp" && mv "$ST.tmp" "$ST" ;;
+  resume)
+    [ "$(get .state)" = paused ] || exit 0
+    left=$(get .left); TOTAL=$(get .total); label=$(get .label)
+    jq -nc --argjson e "$(( $(now) + left ))" --argjson t "$TOTAL" --arg l "$label" '{state:"running",end:$e,total:$t,label:$l}' > "$ST"
+    spawn_waiter "$left" "$label" ;;
+  stop) kill_waiter; rm -f "$ST" ;;
+  status)
+    [ -f "$ST" ] || { echo idle; exit 0; }
+    case "$(get .state)" in
+      running) echo "running $(( $(get .end) - $(now) )) $(get .total)";;
+      paused)  echo "paused $(get .left) $(get .total)";;
+      done)    echo "done 0 $(get .total)";;
+      *) echo idle;;
+    esac ;;
+  waybar)     # JSON для модуля custom/timer: пусто (модуль скрыт), пока таймера нет
+    [ -f "$ST" ] || { echo '{"text":"","class":"idle"}'; exit 0; }
+    st=$(get .state); tot=$(get .total)
+    case "$st" in
+      running) left=$(( $(get .end) - $(now) )); [ "$left" -lt 0 ] && left=0; cls=running ;;
+      paused)  left=$(get .left); cls=paused ;;
+      done)    echo "{\"text\":\"󰂞 00:00\",\"class\":\"done\",\"tooltip\":\"Таймер завершён — клик, чтобы сбросить\"}"; exit 0 ;;
+      *)       echo '{"text":"","class":"idle"}'; exit 0 ;;
+    esac
+    if [ "$left" -ge 3600 ]; then t=$(printf '%d:%02d:%02d' $((left/3600)) $((left%3600/60)) $((left%60))); else t=$(printf '%02d:%02d' $((left/60)) $((left%60))); fi
+    ic="󱎫"; [ "$cls" = paused ] && ic="󰏤"
+    echo "{\"text\":\"$ic $t\",\"class\":\"$cls\",\"tooltip\":\"Таймер: осталось $t из $((tot/60)) мин\"}" ;;
+  *) echo "usage: $0 start|pause|resume|stop|status|waybar" >&2; exit 2 ;;
+esac

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# m2res-idledim [start [сек]|stop] — затемнение экрана перед блокировкой (вызывает hypridle)
+P="$HOME/.config/m2res/player/idledim.py"
+case "${1:-start}" in
+  start) pgrep -f "^python3 $P" >/dev/null || LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" "${2:-45}" >/tmp/m2res-idledim.log 2>&1;;
+  stop) pkill -f "^python3 $P" || true;;
+esac

@@ -1,0 +1,96 @@
+@import url("colors.css");
+
+* {
+    font-family: "CaskaydiaMono Nerd Font";
+    font-size: 13px;
+    font-weight: 700;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 0;
+}
+
+window#waybar { background: transparent; color: @accent; }
+tooltip { background: #0a0a0a; border-radius: 10px; border: 1px solid alpha(@accent, 0.4); }
+tooltip label { color: #e8e8e8; padding: 4px 8px; }
+
+/* общие чёрные пилюли */ #custom-rec,
+#custom-profile,
+#memory,
+#custom-weather,
+#pulseaudio,
+#custom-notif,
+#custom-timer,
+#custom-control,
+#language,
+#tray,
+#clock {
+    background: rgba(8, 8, 8, 0.92);
+    color: @accent;
+    border-radius: 10px;
+    padding: 4px 12px;
+    margin: 2px 4px;
+}
+
+/* RAM: жёлтая риска слева */
+#memory { border-left: 3px solid @accent; border-radius: 4px 10px 10px 4px; }
+
+/* воркспейсы: круглые чёрные, активный — широкая акцентная пилюля */
+#workspaces { background: transparent; }
+#workspaces button {
+    background: rgba(8, 8, 8, 0.92);
+    color: #e8e8e8;
+    font-family: "Liberation Serif", "FreeSerif", serif;
+    font-weight: 900;
+    font-size: 14px;
+    min-width: 26px;
+    padding: 2px 4px;
+    margin: 2px 4px;
+    border-radius: 16px;
+    transition: all 200ms cubic-bezier(.3, 1.4, .5, 1);
+}
+#workspaces button:hover { background: rgba(40, 40, 40, 0.95); }
+#workspaces button.active {
+    background: @accent;
+    color: @on_accent;
+    min-width: 48px;
+}
+#workspaces button.urgent { background: @error; }
+
+#language { color: #e8e8e8; }
+#tray > .passive { -gtk-icon-effect: dim; }
+#clock { color: @accent; font-size: 14px; }
+
+#workspaces button label {
+    font-family: "Liberation Serif", "FreeSerif", serif;
+    font-weight: 900;
+    font-size: 15px;
+}
+
+/* ── ИИ-виджеты ───────────────────────────────────────────────── */
+/* локальная модель: цвет риски и свечение по состоянию */
+/* лимиты: риска по худшему показателю */
+
+/* ── громкость ───────────────────────────────────────────────── */
+#pulseaudio { color: #f4f4f4; font-size: 13px; font-weight: bold; padding: 4px 12px; }
+#pulseaudio:hover { background-color: rgba(30, 30, 30, 0.96); }
+#pulseaudio.muted { color: #ff5c7a; }
+
+/* ── колокольчик уведомлений ─────────────────────────────────── */
+#custom-notif { color: #bdbdbd; font-size: 14px; font-weight: bold; padding: 4px 12px; }
+#custom-notif.new  { color: #0a0a0a; background-color: @accent; }
+#custom-notif.crit { color: #0a0a0a; background-color: #ff5c7a; }
+#custom-notif.dnd  { color: #ff5c7a; }
+#custom-notif:hover { background-color: rgba(30, 30, 30, 0.96); }
+
+/* таймер: виден только пока запущен */
+#custom-timer { font-weight: bold; }
+#custom-control { color: #bdbdbd; font-size: 16px; padding: 4px 12px; }
+#custom-control:hover { background-color: rgba(30, 30, 30, 0.96); color: @accent; }
+#custom-timer.paused { color: #ffd166; }
+#custom-timer.done { color: #0a0a0a; background-color: #ff5c7a; }
+#clock:hover { background-color: rgba(30, 30, 30, 0.96); }
+
+#custom-profile.on { color: #0a0a0a; background-color: @accent; font-weight: bold; padding: 4px 12px; }
+#custom-rec.rec { color: #0a0a0a; background-color: #ff5c7a; font-weight: bold; padding: 4px 12px; }

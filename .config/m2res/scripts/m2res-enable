@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# m2res-enable [off] — подключить/отключить автозапуск и бинды (с бэкапом hyprland.lua)
+H="$HOME/.config/hypr/hyprland.lua"; L='dofile(os.getenv("HOME") .. "/.config/m2res/hypr-m2res.lua") -- m2res'
+cp "$H" "$H.before-m2res-$(date +%Y%m%d-%H%M%S)"
+if [ "${1:-}" = off ]; then sed -i '/-- m2res$/d' "$H"; "$HOME/.config/m2res/scripts/m2res-bar" stop; echo "m2res отключён"; exit; fi
+grep -q -- '-- m2res$' "$H" || printf '\n%s\n' "$L" >> "$H"; echo "m2res подключён (перезайдите или hyprctl reload)"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# m2res-layout [daemon|stop] — OSD смены раскладки (RU/EN пилюля внизу экрана)
+P="$HOME/.config/m2res/player/layoutosd.py"
+case "${1:-daemon}" in
+  daemon) pgrep -f "^python3 $P" >/dev/null || LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" >/tmp/m2res-layout.log 2>&1;;
+  stop) pkill -f "^python3 $P" || true;;
+esac

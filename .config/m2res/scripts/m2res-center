@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# m2res-center [toggle|start|stop] — центр уведомлений (панель справа)
+P="$HOME/.config/m2res/player/center.py"
+running(){ pgrep -f "^python3 $P" >/dev/null; }
+start(){
+  running && return
+  local mon top
+  mon=$(hyprctl -j monitors | jq -r --argjson c "$(hyprctl -j cursorpos)" '([.[]|select(.x<=$c.x and $c.x<.x+.width and .y<=$c.y and $c.y<.y+.height)][0] // (.[]|select(.focused))).name')
+  top=$(hyprctl -j layers | jq -r '[..|objects|select(.namespace?=="waybar")|(.y+.h)][0] // 36'); top=$((top + 6))
+  M2_MON="$mon" M2_TOP="$top" LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" >/tmp/m2res-center.log 2>&1
+}
+case "${1:-toggle}" in
+  start) start;;
+  stop) pkill -f "^python3 $P";;
+  toggle) if running; then pkill -f "^python3 $P"; else start; fi;;
+esac

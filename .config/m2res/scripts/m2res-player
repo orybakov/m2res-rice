@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# m2res-player [toggle|start|stop]  — виджет-плеер (GTK4 layer-shell), Esc закрывает
+P="$HOME/.config/m2res/player/player.py"
+running(){ pgrep -f "^python3 $P" >/dev/null; }
+case "${1:-toggle}" in
+  start) running || LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" >/tmp/m2res-player.log 2>&1;;
+  stop) pkill -f "^python3 $P";;
+  toggle) if running; then pkill -f "^python3 $P"; else "$0" start; fi;;
+esac

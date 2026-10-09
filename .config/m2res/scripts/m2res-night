@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# m2res-night [toggle|on|off|status|line] — автоматический ночной свет по закату и восходу (sunsetr, режим geo, плавный переход 45 мин).
+# Координаты и температуры — ~/.config/sunsetr/sunsetr.toml (сейчас Москва, ночь 3300K, день 6500K).
+# `-b` у sunsetr в Lua-режиме Hyprland не работает (он зовёт hyprctl dispatch exec), поэтому запускаем процесс сами через setsid.
+# status → "off" или "on <период> <K> <следующая смена>"; line → короткая подпись для плитки Центра управления.
+clean(){ sed 's/\x1b\[[0-9;]*m//g'; }
+running(){ pgrep -x sunsetr >/dev/null; }
+case "${1:-toggle}" in
+  on)  running || { hyprctl eval 'hl.config({ decoration = { screen_shader = "" } })' >/dev/null 2>&1; setsid -f sunsetr >/tmp/sunsetr.log 2>&1; };;
+  off) running && sunsetr stop >/dev/null 2>&1; sleep 0.3; running && pkill -x sunsetr; true;;
+  toggle) if running; then "$0" off; else "$0" on; fi;;
+  status)
+    if running; then
+      s=$(sunsetr status 2>/dev/null | clean)
+      p=$(echo "$s" | sed -n 's/.*Current period: *//p' | awk '{print $1}')
+      k=$(echo "$s" | sed -n 's/.*Temperature: *//p' | awk '{print $1}')
+      n=$(echo "$s" | sed -n 's/.*Next period: *\([0-9][0-9]:[0-9][0-9]\).*/\1/p')
+      echo "on ${p:-?} ${k:-?} ${n:-?}"
+    else echo off; fi;;
+  line)
+    st=$("$0" status)
+    case "$st" in off) echo "обычные цвета";; *) set -- $st; echo "${3} → ${4}";; esac;;
+esac

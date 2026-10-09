@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""m2res-clip-store — сохраняет содержимое буфера обмена в историю (вызывает `wl-paste --watch`, данные — в stdin).
+
+Хранилище: ~/.local/share/m2res/clipboard/ (права 700): index.json + images/<sha>.png|jpg.
+Правила приватности:
+  * копии из менеджеров паролей (mime x-kde-passwordManagerHint) не сохраняются;
+  * текст длиннее 200 КБ, пустой или из одних пробелов — пропускается;
+  * неприкреплённые записи старше 30 дней и сверх 300 штук удаляются.
+Сам просмотр: m2res-clip toggle (SUPER+V)."""
+import sys, os, json, time, hashlib, subprocess, fcntl
+
+D = os.path.expanduser("~/.local/share/m2res/clipboard"); IMG = f"{D}/images"; IDX = f"{D}/index.json"
+MAX, DAYS, MAXTEXT = 300, 30, 200_000
+
+
+def load():
+    try: return json.load(open(IDX))
+    except Exception: return []
+
+
+def save(items):
+    tmp = IDX + ".tmp"; json.dump(items, open(tmp, "w"), ensure_ascii=False); os.replace(tmp, IDX)
+
+
+def main():
+    data = sys.stdin.buffer.read()
+    if not data or len(data) > 30_000_000: return
+    try:
+        types = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=2).stdout
+    except Exception: types = ""
+    if "passwordManagerHint" in types: return
+    os.makedirs(IMG, mode=0o700, exist_ok=True); os.chmod(D, 0o700)
+    lock = open(f"{D}/.lock", "w"); fcntl.flock(lock, fcntl.LOCK_EX)
+    items = load(); now = time.time()
+    if data[:8] == b"\x89PNG\r\n\x1a\n" or data[:3] == b"\xff\xd8\xff":
+        ext = "png" if data[:4] == b"\x89PNG" else "jpg"
+        h = hashlib.sha1(data).hexdigest()[:16]; path = f"{IMG}/{h}.{ext}"
+        if not os.path.exists(path): open(path, "wb").write(data)
+        key = "img:" + h; ent = {"id": key, "kind": "image", "file": path, "size": len(data)}
+    else:
+        try: text = data.decode("utf-8")
+        except UnicodeDecodeError: return
+        if not text.strip() or len(data) > MAXTEXT: return
+        key = "txt:" + hashlib.sha1(data).hexdigest()[:16]; ent = {"id": key, "kind": "text", "text": text}
+    old = next((i for i in items if i["id"] == key), None)
+    ent["ts"] = now; ent["pinned"] = bool(old and old.get("pinned"))
+    items = [i for i in items if i["id"] != key]; items.insert(0, ent)
+    keep, n = [], 0
+    for i in items:
+        if i.get("pinned") or (now - i["ts"] < DAYS * 86400 and n < MAX): keep.append(i); n += 0 if i.get("pinned") else 1
+        elif i.get("kind") == "image" and not any(k.get("file") == i.get("file") for k in keep):
+            try: os.remove(i["file"])
+            except OSError: pass
+    save(keep)
+
+
+if __name__ == "__main__":
+    main()

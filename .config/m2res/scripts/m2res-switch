@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# m2res-switch [daemon|next|prev|stop] — Alt+Tab с превью окон (демон switcher.py ждёт сигналов)
+P="$HOME/.config/m2res/player/switcher.py"
+running(){ pgrep -f "^python3 $P" >/dev/null; }
+start(){ running || { LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so setsid -f python3 "$P" >/tmp/m2res-switch.log 2>&1; sleep 0.6; }; }
+case "${1:-daemon}" in
+  daemon) start;;
+  next) start; pkill -USR1 -f "^python3 $P";;
+  prev) start; pkill -USR2 -f "^python3 $P";;
+  stop) pkill -f "^python3 $P";;
+esac

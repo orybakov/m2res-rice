@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Хук mako (on-notify): дописывает самое свежее активное уведомление в журнал центра уведомлений.
+LOG="$HOME/.local/share/m2res/notifications.jsonl"; mkdir -p "$(dirname "$LOG")"; touch "$LOG"
+last=$(tail -n 1 "$LOG" | jq -r '.id // -1' 2>/dev/null || echo -1)
+makoctl list -j 2>/dev/null | jq -c --argjson ts "$(date +%s)" --argjson last "${last:--1}" '
+  (max_by(.id)) as $n | select($n and $n.id != $last)
+  | {ts:$ts, id:$n.id, app:($n.app_name // "?"), summary:($n.summary // ""), body:($n.body // ""),
+     urgency:($n.urgency // "normal"), icon:($n.app_icon // "")}' >> "$LOG"
+# сократить журнал до 500 записей
+[ "$(wc -l < "$LOG")" -gt 500 ] && tail -n 400 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+pkill -RTMIN+9 -x waybar 2>/dev/null
+"$HOME/.config/m2res/scripts/m2res-notify-sound" &
+exit 0

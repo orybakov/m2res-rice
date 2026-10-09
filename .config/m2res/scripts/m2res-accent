@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# m2res-accent auto | set <#hex> | show — единый акцент райса, взятый из обоев.
+#   auto  берёт цвет из имени применённых обоев (…-fill-b0d500-…) либо самый насыщенный цвет картинки
+#   set   задать вручную
+# Перекрашивает: waybar, плееры/виджеты (colors.json), экран блокировки (colors.conf, hyprlock.conf, lockfx), mako.
+# Виджеты-меню читают colors.json при каждом открытии, waybar перезапускается, mako перечитывается.
+# Рамки окон и курсор/выделение Ghostty красит m2res-paint. Системные конфиги не трогает. Откат: m2res-accent set <старый hex> (или *.bak-accent).
+set -euo pipefail
+M2="$HOME/.config/m2res"; CJ="$M2/player/colors.json"
+cur(){ jq -r .accent "$CJ" 2>/dev/null || echo "#b0d500"; }
+from_wall(){
+  local f; f=$(hyprctl hyprpaper listactive 2>/dev/null | head -1 | sed 's/^[^:]*: *//')
+  [ -r "$f" ] || f="$M2/wallpapers/current.png"
+  [ -r "$f" ] || return 1
+  local h; h=$(basename "$f" | grep -oiE '(^|-)[0-9a-f]{6}-[0-9]+x[0-9]+' | head -1 | grep -oiE '[0-9a-f]{6}' | head -1 || true)
+  if [ -n "$h" ]; then echo "#${h,,}"; return; fi
+  python3 - "$f" <<'PY'
+import sys, colorsys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB"); im.thumbnail((160, 90))
+best, score = None, -1
+for (r, g, b) in im.getdata():
+    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    sc = s * v * (1 if v > 0.35 else 0.2)
+    if sc > score: best, score = (r, g, b), sc
+r, g, b = best; h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+r, g, b = colorsys.hsv_to_rgb(h, max(s, 0.75), max(v, 0.85))
+print("#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255)))
+PY
+}
+apply(){
+  local new="${1,,}" old; old=$(cur); old="${old,,}"
+  [[ "$new" =~ ^#[0-9a-f]{6}$ ]] || { echo "нужен #rrggbb" >&2; exit 2; }
+  [ "$new" = "$old" ] && { echo "акцент не изменился: $new"; return; }
+  matugen color hex "$new" -c "$M2/matugen/config.toml" -t scheme-vibrant -m dark -q
+  # matugen подбирает свой primary — приводим к точному цвету обоев
+  local got; got=$(jq -r .accent "$CJ"); got="${got,,}"
+  if [ "$got" != "$new" ]; then
+    sed -i "s/${got#\#}/${new#\#}/Ig" "$CJ" "$M2/waybar/colors.css" "$M2/lock/colors.conf"
+  fi
+  local o="${old#\#}" n="${new#\#}"
+  for f in "$M2/mako/config" "$M2/lock/hyprlock.conf"; do sed -i "s/$o/$n/Ig" "$f"; done
+  makoctl reload 2>/dev/null || true
+  "$M2/scripts/m2res-bar" reload >/dev/null 2>&1 || true
+  pkill -f "^python3 $M2/scripts/m2res-lockfx" 2>/dev/null || true
+  "$M2/scripts/m2res-paint" apply >/dev/null 2>&1 || true     # рамки окон и Ghostty
+  echo "акцент: $old → $new"
+}
+case "${1:-show}" in
+  show) cur;;
+  set) apply "${2:?usage: m2res-accent set #rrggbb}";;
+  auto) apply "$(from_wall)";;
+  *) echo "usage: $0 auto|set <#hex>|show" >&2; exit 2;;
+esac

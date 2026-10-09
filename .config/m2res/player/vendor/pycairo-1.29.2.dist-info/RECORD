@@ -1,0 +1,11 @@
+cairo/__init__.py,sha256=XIH_dv8y8hXxV9pPD7RO70ZtfcxP95JMzc_Bnxv78TQ,660
+cairo/__init__.pyi,sha256=1KPYSmZS8OTlJfXBvtpclVsoBxwkfonsCPEE8GuOMmA,219293
+cairo/__pycache__/__init__.cpython-314.pyc,,
+cairo/_cairo.cpython-314-x86_64-linux-gnu.so,sha256=XhXeS2ZgNhF-C05PxFoS6TMmm5DhVCT3iqVoC7zCGsQ,282616
+cairo/include/py3cairo.h,sha256=I_EkJoP2ZKXhYnHupIiBz0RdR4Cy6TqE8Y0UXcdVceE,8778
+cairo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+pycairo-1.29.2.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+pycairo-1.29.2.dist-info/METADATA,sha256=gORcKVxWGWyl7PkmBmJ9VehsMfZdPw4QtoM0FRw6SC4,2279
+pycairo-1.29.2.dist-info/RECORD,,
+pycairo-1.29.2.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+pycairo-1.29.2.dist-info/WHEEL,sha256=Sp6mV9H7dV_msVl59_0XTZlGwXM3vPrRVtg8yB4mi7w,88

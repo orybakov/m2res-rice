@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Колокольчик для waybar: число непрочитанных уведомлений (новее метки открытия центра). Обновляется по SIGRTMIN+9."""
+import json, os
+D = os.path.expanduser("~/.local/share/m2res")
+try: seen = int(open(f"{D}/notif_seen").read().strip())
+except Exception: seen = 0
+n = crit = tot = 0
+try:
+    for line in open(f"{D}/notifications.jsonl", encoding="utf-8"):
+        try: j = json.loads(line)
+        except Exception: continue
+        tot += 1
+        if j.get("ts", 0) > seen:
+            n += 1; crit += j.get("urgency") == "critical"
+except FileNotFoundError: pass
+import subprocess
+try: dnd = "do-not-disturb" in subprocess.run(["makoctl", "mode"], capture_output=True, text=True, timeout=2).stdout
+except Exception: dnd = False
+icon = "󰂛" if dnd else ("󰂚" if n else "󰂜")
+txt = f"{icon} {n}" if n else icon
+cls = "dnd" if dnd else ("crit" if crit else ("new" if n else "empty"))
+print(json.dumps({"text": txt, "class": cls, "tooltip": False}, ensure_ascii=False))

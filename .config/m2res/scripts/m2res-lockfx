@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""m2res-lockfx — поставщик «живых» кадров для экрана блокировки (hyprlock умеет только cmd[update:N] у label).
+`m2res-lockfx ensure` — запустить демон, если не запущен (его вызывает невидимый label).
+Демон пишет Pango-разметку в $XDG_RUNTIME_DIR/m2res-lock/<имя>; label делает `cat` этого файла.
+Выходит сам, когда hyprlock завершился. Не показывает тексты уведомлений — только счётчики."""
+import os, sys, time, math, json, random, subprocess, fcntl, threading, html
+from datetime import datetime, timezone
+
+RUN = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "m2res-lock")
+HOME = os.path.expanduser("~")
+NOTIF = HOME + "/.local/share/m2res/notifications.jsonl"
+def _acc():
+    try: return json.load(open(HOME + "/.config/m2res/player/colors.json"))["accent"]
+    except Exception: return "#b0d500"
+
+
+ACC, HI, DIM, RED, YEL, TXT = _acc(), "#d4ff00", "#8a8d80", "#ff5c7a", "#ffd166", "#ececE6"
+MONTHS = "января февраля марта апреля мая июня июля августа сентября октября ноября декабря".split()
+DAYS = "ПОНЕДЕЛЬНИК ВТОРНИК СРЕДА ЧЕТВЕРГ ПЯТНИЦА СУББОТА ВОСКРЕСЕНЬЕ".split()
+
+
+def put(name, s):
+    p = os.path.join(RUN, name); t = p + ".tmp"
+    with open(t, "w") as f: f.write(s)
+    os.replace(t, p)
+
+
+def span(txt, color=None, alpha=None, extra=""):
+    a = f' foreground="{color}"' if color else ""
+    if alpha is not None and alpha < 0.999: a += f' alpha="{max(1, int(alpha * 100))}%"'
+    return f"<span{a}{extra}>{txt}</span>"
+
+
+def lvl_color(p): return RED if p < 20 else (YEL if p < 50 else TXT)
+
+
+def bar(frac, n=18, color=ACC):
+    k = max(0, min(n, int(round(frac * n))))
+    return span("━" * k, color) + span("━" * (n - k), DIM, 0.28)
+
+
+def chip(txt): return span(f" {txt} ", "#0a0a0a", extra=f' background="{ACC}"')
+
+
+# ---------- быстрые кадры ----------
+def f_wave(t, n=120):
+    out, run, rc = [], "", None
+    for i in range(n):
+        env = 0.5 + 0.5 * math.sin(i * 0.071 - t * 1.3)
+        v = (0.5 + 0.5 * math.sin(i * 0.31 + t * 4.1)) * (0.4 + 0.6 * env) * (0.65 + 0.35 * math.sin(i * 0.9 - t * 7.3))
+        v = max(0.0, min(0.999, v)); g = "▁▂▃▄▅▆▇█"[int(v * 8)]
+        c = (HI if v > 0.8 else ACC, 0.35 + 0.65 * v)
+        key = (c[0], round(c[1], 1))
+        if key != rc:
+            if run: out.append(span(run, rc[0], rc[1]))
+            run, rc = "", key
+        run += g
+    if run: out.append(span(run, rc[0], rc[1]))
+    return "".join(out)
+
+
+def f_scan(t, n=72):
+    period = 2.2; ph = (t % period) / period; pos = (1 - abs(2 * ph - 1)) * (n - 1)
+    direction = 1 if ph < 0.5 else -1
+    out = []
+    for i in range(n):
+        d = (pos - i) * direction                    # >0 — позади головы
+        if abs(d) < 0.7: out.append(span("━", HI))
+        elif 0 < d < 14: out.append(span("━", ACC, 1 - d / 14 * 0.85))
+        else: out.append(span("━", DIM, 0.22))
+    return "".join(out)
+
+
+GLYPH = "▓▒░#@%&$/\\|"
+
+
+def f_title(t):
+    base = "▌ SESSION LOCKED ▐"
+    cyc = t % 5.0
+    if cyc < 0.28:
+        r = random.Random(int(t * 25))
+        s = ""
+        for ch in base:
+            if ch != " " and r.random() < 0.28: s += span(html.escape(r.choice(GLYPH)), RED if r.random() < 0.4 else HI)
+            else: s += span(ch, ACC)
+        return s
+    pulse = 0.78 + 0.22 * math.sin(t * 2.2)
+    return span(base, ACC, pulse)
+
+
+_HEX = "".join(random.Random(7).choice("0123456789ABCDEF") for _ in range(2400))
+
+
+def f_ticker(t, off, n=190, rev=False):
+    i = int(t * 11 * (-1 if rev else 1) + off) % (len(_HEX) - n)
+    chunk = _HEX[i:i + n]; out, k = [], 12
+    for j in range(0, n, k):
+        mid = abs((j + k / 2) / n - 0.5) * 2          # края гаснут
+        out.append(span(" ".join(chunk[j:j + k]) + " ", ACC, max(0.05, 0.5 - mid * 0.45)))
+    return "".join(out)
+
+
+def f_clock(t):
+    now = datetime.now(); colon = 1.0 if (t % 1.0) < 0.55 else 0.18
+    big = span(f"{now:%H}", TXT) + span(":", ACC, colon) + span(f"{now:%M}", TXT)
+    sec = now.second + now.microsecond / 1e6
+    n = 60; k = int(sec); bars = span("━" * k, ACC) + span("━", HI) + span("━" * (n - k - 1), DIM, 0.25)
+    return big, bars, f"{now:%S}"
+
+
+def f_date():
+    n = datetime.now()
+    return span(f"{DAYS[n.weekday()]}  ·  {n.day:02d} {MONTHS[n.month - 1].upper()}  ·  {n.year}", DIM)
+
+
+# ---------- медленные данные ----------
+class Sys:
+    def __init__(self):
+        self.cpu = (0, 0); self.cpu_p = 0.0; self.net = (0, 0, time.time()); self.rx = self.tx = 0.0
+        self.gpu = (0, 0, 0, 1); self.tmp = 0
+        threading.Thread(target=self.gpu_loop, daemon=True).start()
+        self.hw = None
+        for h in os.listdir("/sys/class/hwmon"):
+            try:
+                if open(f"/sys/class/hwmon/{h}/name").read().strip() in ("coretemp", "k10temp"): self.hw = f"/sys/class/hwmon/{h}/temp1_input"
+            except Exception: pass
+
+    def gpu_loop(self):
+        while True:
+            try:
+                o = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                                   capture_output=True, text=True, timeout=3).stdout.split(",")
+                self.gpu = tuple(float(x) for x in o[:4])
+            except Exception: pass
+            time.sleep(2.5)
+
+    def update(self):
+        f = open("/proc/stat").readline().split()[1:]; v = list(map(int, f)); idle = v[3] + v[4]; tot = sum(v)
+        di, dt = idle - self.cpu[0], tot - self.cpu[1]; self.cpu = (idle, tot)
+        if dt > 0: self.cpu_p = 100 * (1 - di / dt)
+        try: self.tmp = int(open(self.hw).read()) / 1000
+        except Exception: pass
+        rx = tx = 0
+        for ln in open("/proc/net/dev").read().splitlines()[2:]:
+            nm, d = ln.split(":"); nm = nm.strip()
+            if nm.startswith(("enp", "eth", "wlan", "wlp")): c = d.split(); rx += int(c[0]); tx += int(c[8])
+        now = time.time(); dtt = max(0.2, now - self.net[2])
+        if self.net[0]: self.rx, self.tx = (rx - self.net[0]) / dtt, (tx - self.net[1]) / dtt
+        self.net = (rx, tx, now)
+
+    def render(self):
+        m = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo").read().splitlines()[:6]}
+        used = (m["MemTotal"] - m["MemAvailable"]) / 1024 / 1024; tot = m["MemTotal"] / 1024 / 1024
+        up = float(open("/proc/uptime").read().split()[0]); h, mi = int(up // 3600), int(up % 3600 // 60)
+        la = open("/proc/loadavg").read().split()[:3]
+        g = self.gpu
+
+        def hum(b): return f"{b / 1048576:.1f} MB/s" if b > 1048576 else f"{b / 1024:.0f} KB/s"
+
+        def row(lab, frac, a, b, col=ACC): return span(f"{lab:<5}", DIM) + bar(frac, 20, col) + span(f" {a:>5}", TXT) + span(f"  {b:>6}", DIM)
+        L = [chip("SYSTEM") + span(f"   uptime {h}h{mi:02d}m", DIM), "",
+             row("CPU", self.cpu_p / 100, f"{self.cpu_p:.0f}%", f"{self.tmp:.0f}°C", RED if self.cpu_p > 90 else ACC),
+             row("RAM", used / tot, f"{used / tot * 100:.0f}%", f"{used:.1f}G"),
+             row("GPU", g[0] / 100, f"{g[0]:.0f}%", f"{g[1]:.0f}°C", RED if g[1] > 85 else ACC),
+             row("VRAM", g[2] / g[3], f"{g[2] / g[3] * 100:.0f}%", f"{g[2] / 1024:.1f}G"), "",
+             span("NET  ", DIM) + span("↓ ", ACC) + span(f"{hum(self.rx):<11}", TXT) + span("↑ ", ACC) + span(hum(self.tx), TXT),
+             span("LOAD ", DIM) + span("  ".join(la), TXT)]
+        return "\n".join(L)
+
+
+def rt(iso, raw):
+    try:
+        sec = (datetime.fromisoformat(iso.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds()
+        if sec > 0:
+            m = int(sec // 60); return f"{m // 1440}d" if m >= 2880 else (f"{m // 60}h{m % 60:02d}" if m >= 60 else f"{m}m")
+        return "now"
+    except Exception: return raw or ""
+
+
+def pctl(*a):
+    try: return subprocess.run(["playerctl", *a], capture_output=True, text=True, timeout=1).stdout.strip()
+    except Exception: return ""
+
+
+def f_player():
+    st = pctl("status")
+    if st not in ("Playing", "Paused"): return chip("PLAYER") + span("   —", DIM)
+    title, artist = pctl("metadata", "xesam:title"), pctl("metadata", "xesam:artist")
+    try: frac = float(pctl("position")) / (int(pctl("metadata", "mpris:length")) / 1e6)
+    except Exception: frac = 0
+    t = (title[:44] + "…") if len(title) > 45 else title
+    return "\n".join([chip("PLAYER") + span("   ▶ playing" if st == "Playing" else "   ⏸ paused", DIM),
+                      "", span(html.escape(t), TXT), span(html.escape(artist[:50]), DIM), bar(frac, 44)])
+
+
+def f_notif(since):
+    n = crit = 0; apps = set()
+    try:
+        for ln in open(NOTIF).read().splitlines()[-300:]:
+            try: j = json.loads(ln)
+            except Exception: continue
+            if j.get("ts", 0) / (1000 if j.get("ts", 0) > 1e11 else 1) > since:
+                n += 1; apps.add(j.get("app", "")); crit += j.get("urgency") == "critical"
+    except Exception: pass
+    if not n: return chip("INBOX") + span("   пусто с момента блокировки", DIM)
+    return chip("INBOX") + span(f"   {n} нов.", TXT) + (span(f"  ·  {crit} критич.", RED) if crit else "")
+
+
+# ---------- демон ----------
+def hyprlock_alive():
+    try: return subprocess.run(["pidof", "hyprlock"], capture_output=True).returncode == 0
+    except Exception: return True
+
+
+def daemon():
+    os.makedirs(RUN, exist_ok=True)
+    lk = open(os.path.join(RUN, "lock"), "w")
+    try: fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError: return
+    t_start = time.time(); sysd = Sys(); due = {}; dead = 0; chk = 0.0
+    def every(k, sec, now):
+        if now >= due.get(k, 0): due[k] = now + sec; return True
+        return False
+    try:
+        while True:
+            now = time.time(); t = now
+            if every("fast", 0.085, now):
+                put("wave", f_wave(t)); put("scan", f_scan(t)); put("title", f_title(t))
+                put("tick_top", f_ticker(t, 0)); put("tick_bot", f_ticker(t, 700, rev=True))
+            if every("clock", 0.2, now):
+                c, b, s = f_clock(t); put("clock", c); put("secbar", b)
+            if every("sys", 1.0, now): sysd.update(); put("sys", sysd.render())
+            if every("slow", 5.0, now): put("date", f_date())
+            if every("player", 1.0, now): put("player", f_player())
+            if every("notif", 2.0, now): put("notif", f_notif(t_start))
+            if now - chk > 1.0:
+                chk = now; dead = 0 if hyprlock_alive() else dead + 1
+                if dead >= 3: break
+            time.sleep(0.02)
+    finally:
+        for f in os.listdir(RUN):
+            if f != "lock":
+                try: os.remove(os.path.join(RUN, f))
+                except OSError: pass
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "ensure"
+    if cmd == "daemon": daemon()
+    elif cmd == "ensure":
+        os.makedirs(RUN, exist_ok=True)
+        probe = open(os.path.join(RUN, "lock"), "a")
+        try:
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB); fcntl.flock(probe, fcntl.LOCK_UN); probe.close()
+        except OSError:
+            sys.exit(0)                                   # демон уже держит блокировку
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "daemon"], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif cmd == "once":                                   # отладка: напечатать все кадры
+        sysd = Sys(); time.sleep(0.5); sysd.update()
+        for k, v in (("wave", f_wave(time.time())), ("scan", f_scan(time.time())), ("title", f_title(time.time())), ("clock", f_clock(time.time())[0]),
+                     ("sys", sysd.render()), ("player", f_player()), ("notif", f_notif(0)), ("date", f_date())):
+            print(f"--- {k}\n{v}")

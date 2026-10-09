@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# m2res-preset <действие> — раскладки столов под 32:9 и пресеты запуска (конфиг: ~/.config/m2res/presets.conf)
+#   scrolling|center|dwindle|monocle   включить раскладку на ТЕКУЩЕМ столе
+#   cycle                              dwindle → scrolling → center → monocle → …  (SUPER+ALT+L)
+#   apply                              применить WS_N из конфига ко всем указанным столам, выставить ширину колонки под монитор
+#   launch <имя>                       запустить пресет PRESET_<имя> из конфига на текущем столе
+#   status                             раскладка текущего стола
+set -u
+CONF="$HOME/.config/m2res/presets.conf"; [ -r "$CONF" ] && . "$CONF"
+: "${COL_WIDE:=0.333}" "${COL_NORMAL:=0.5}" "${CENTER_MFACT:=0.5}"
+ws(){ hyprctl -j activeworkspace | jq -r .id; }
+cur(){ hyprctl -j activeworkspace | jq -r .tiledLayout; }
+to_lay(){ case "$1" in center) echo master;; *) echo "$1";; esac; }
+set_ws(){   # $1 стол, $2 имя раскладки
+  local lay; lay=$(to_lay "$2")
+  case "$lay" in dwindle|scrolling|master|monocle) ;; *) echo "неизвестная раскладка: $2" >&2; return 2;; esac
+  hyprctl eval "hl.workspace_rule({ workspace = '$1', layout = '$lay' })" >/dev/null
+}
+tune(){
+  local ratio w; ratio=$(hyprctl -j monitors | jq -r '[.[]|select(.focused)][0] | (.width / .height * 100 | floor)')
+  [ "${ratio:-0}" -ge 220 ] && w=$COL_WIDE || w=$COL_NORMAL
+  hyprctl eval "hl.config({ scrolling = { column_width = $w }, master = { orientation = 'center', mfact = $CENTER_MFACT, new_status = 'slave' } })" >/dev/null
+}
+notify(){ notify-send -a Layout "Раскладка: $1" -t 1500 2>/dev/null; true; }
+case "${1:-status}" in
+  scrolling|center|dwindle|monocle) tune; set_ws "$(ws)" "$1"; notify "$1";;
+  cycle)
+    tune; c=$(cur); case "$c" in dwindle) n=scrolling;; scrolling) n=center;; master) n=monocle;; *) n=dwindle;; esac
+    set_ws "$(ws)" "$n"; notify "$n";;
+  apply)
+    tune
+    for v in $(compgen -A variable | grep '^WS_[0-9]*$'); do set_ws "${v#WS_}" "${!v}"; done;;
+  launch)
+    p="PRESET_${2:?usage: m2res-preset launch <имя>}"; [ -n "${!p:-}" ] || { echo "нет пресета $2" >&2; exit 1; }
+    IFS=';' read -ra cmds <<< "${!p}"
+    for c in "${cmds[@]}"; do setsid -f bash -c "$c" >/dev/null 2>&1; sleep 0.7; done;;
+  status) cur;;
+  *) echo "usage: $0 scrolling|center|dwindle|monocle|cycle|apply|launch <имя>|status" >&2; exit 2;;
+esac

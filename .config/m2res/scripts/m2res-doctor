@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""m2res-doctor — проверка состояния райса и git-снимки настроек.
+
+  m2res-doctor               проверить всё (PASS / WARN / FAIL), код выхода 1 при FAIL
+  m2res-doctor snapshot [m]  сохранить текущие настройки в git (коммит только если есть изменения)
+  m2res-doctor log           последние снимки
+  m2res-doctor diff          что изменилось с последнего снимка
+  m2res-doctor restore REF PATH   достать из снимка один файл (печатает в stdout; ничего не перезаписывает)
+
+Снимки лежат в ~/.local/share/m2res/snapshots (отдельный git, ваши репозитории не затрагиваются).
+Обои, звуки, кэши и *.bak-* в снимок не попадают."""
+import os, re, sys, glob, json, shutil, subprocess, time, py_compile, tempfile
+from datetime import datetime
+
+H = os.path.expanduser("~"); M2 = f"{H}/.config/m2res"; HY = f"{H}/.config/hypr"
+SNAP = f"{H}/.local/share/m2res/snapshots"
+C = sys.stdout.isatty()
+def col(c, s): return f"\033[{c}m{s}\033[0m" if C else s
+res = {"PASS": 0, "WARN": 0, "FAIL": 0}
+
+
+def out(kind, what, hint=""):
+    res[kind] += 1
+    tag = {"PASS": col("32", "PASS"), "WARN": col("33", "WARN"), "FAIL": col("31;1", "FAIL")}[kind]
+    print(f"  {tag}  {what}" + (col("90", f"   → {hint}") if hint and kind != "PASS" else ""))
+
+
+def sh(*a, t=4):
+    try: return subprocess.run(a, capture_output=True, text=True, timeout=t).stdout
+    except Exception: return ""
+
+
+def alive(pattern, regex=False):
+    return subprocess.run(["pgrep", "-f" if regex else "-x", pattern], capture_output=True).returncode == 0
+
+
+def sec(t): print("\n" + col("1", t))
+
+
+# ---------------- проверки ----------------
+def check():
+    sec("Процессы")
+    for name, hint in (("Hyprland", ""), ("waybar", "m2res-bar start"), ("hyprpaper", "hyprpaper &"), ("hypridle", "systemctl --user enable --now hypridle")):
+        out("PASS" if alive(name) else "FAIL", name, hint)
+    for pat, name, hint in ((r"^python3 .*player/volume\.py", "volume-демон", "m2res-volume daemon"),
+                            (r"^python3 .*player/layoutosd\.py", "OSD раскладки", "m2res-layout daemon"),
+                            (r"^python3 .*player/switcher\.py", "демон Alt+Tab", "m2res-switch daemon")):
+        out("PASS" if alive(pat, True) else "FAIL", name, hint)
+    mk = alive("mako"); out("PASS" if mk else "WARN", "mako (уведомления)", "m2res-notify on")
+    if alive("hyprlock"): out("WARN", "hyprlock сейчас запущен (сессия заблокирована?)", "pkill hyprlock, если это не так")
+    else: out("PASS", "hyprlock не висит в фоне")
+    if alive(r"lockfx daemon", True) and not alive("hyprlock"): out("WARN", "m2res-lockfx работает без блокировки", "pkill -f 'lockfx daemon'")
+
+    sec("Hyprland")
+    ce = sh("hyprctl", "configerrors").strip()
+    out("PASS" if not ce else "FAIL", "конфиг без ошибок", ce[:160])
+    texts = {}
+    for f in glob.glob(f"{HY}/lua/*.lua") + [f"{M2}/hypr-m2res.lua", f"{HY}/hyprland.lua"]:
+        try: texts[f] = open(f).read()
+        except Exception: pass
+    binds = {}
+    for f, t in texts.items():
+        for m in re.finditer(r'hl\.bind\(\s*"([^"]+)"\s*,(?=([^\n]*(?:\n[^\n]*){0,6}))', t):
+            k = re.sub(r"\s+", "", m.group(1)).upper(); binds.setdefault(k, []).append((os.path.basename(f), m.group(2).split("hl.bind(")[0]))
+    def has(combo, needle): return any(needle in b for _, b in binds.get(combo, []))
+    out("PASS" if has("SUPER+D", "m2res-launcher") else "FAIL", "SUPER+D → лаунчер m2res")
+    out("PASS" if has("SUPER+L", "hyprlock") else "FAIL", "SUPER+L → hyprlock")
+    out("PASS" if has("ALT+TAB", "m2res-switch") else "WARN", "ALT+Tab → m2res-switch")
+    out("PASS" if has("SUPER+CTRL+SHIFT+G", "m2res-game") else "WARN", "SUPER+Ctrl+Shift+G → m2res-game")
+    out("PASS" if has("SUPER+F1", "m2res-cheat") else "WARN", "SUPER+F1 → шпаргалка по биндам")
+    if os.path.isdir(f"{M2}/installer"):   # сборочная часть есть только на основной машине (в установщик не входит)
+        out("PASS" if os.path.exists(f"{M2}/installer/header.sh") and os.path.exists(f"{M2}/installer/strip_ai.py") and os.access(f"{M2}/scripts/m2res-pack", os.X_OK) else "WARN", "установщик одним файлом (m2res-pack + installer/)")
+    _wl = subprocess.run(["hyprctl", "layers"], capture_output=True, text=True).stdout
+    out("PASS" if "namespace: waybar" in _wl else "FAIL", "панель waybar видна на экране (есть слой)", "m2res-bar ensure")
+    out("PASS" if has("SUPER+SHIFT+B", "m2res-dock") and os.path.exists(f"{M2}/player/dock.py") else "WARN", "SUPER+Shift+B → боковая панель для 32:9 (dock.conf)")
+    out("PASS" if has("SUPER+CTRL+P", "m2res-profile") and os.path.exists(os.path.expanduser("~/.config/m2res/profiles.conf")) else "WARN", "SUPER+Ctrl+P → профили райса (profiles.conf)")
+    out("PASS" if all(os.access(f"{M2}/scripts/{n}", os.X_OK) for n in ("m2res-backup", "m2res-install")) and glob.glob(os.path.expanduser("~/Backups/m2res/m2res-2*.tar.gz")) else "WARN", "бэкап и установщик (m2res-backup / m2res-install), есть архив", "m2res-backup make")
+    out("PASS" if has("SUPER+ALT+L", "m2res-preset") and os.path.exists(os.path.expanduser("~/.config/m2res/presets.conf")) else "WARN", "SUPER+Alt+L → раскладки столов (scrolling/center), presets.conf")
+    try:
+        _acc = json.load(open(os.path.expanduser("~/.config/m2res/player/colors.json")))["accent"].lstrip("#").lower()
+        _bd = subprocess.run(["hyprctl", "getoption", "general:col.active_border"], capture_output=True, text=True).stdout.lower()
+    except Exception:
+        _acc, _bd = "?", ""
+    out("PASS" if _acc in _bd else "WARN", "рамка активного окна = акцент (m2res-paint)")
+    out("PASS" if has("SUPER+SHIFT+D", "m2res-dictate") and os.path.exists(os.path.expanduser("~/.local/share/m2res/whisper/stt.py")) else "WARN", "SUPER+Shift+D → голосовая диктовка (Whisper)")
+    out("PASS" if has("SUPER+SHIFT+O", "m2res-tools") and has("SUPER+SHIFT+Q", "m2res-tools") else "WARN", "OCR / QR / пипетка (m2res-tools)")
+    out("PASS" if os.path.exists(os.path.expanduser("~/.local/share/m2res/tessdata/rus.traineddata")) else "WARN", "OCR: rus.traineddata установлен")
+    out("PASS" if has("SUPER+SHIFT+R", "m2res-rec") else "WARN", "SUPER+Shift+R → запись экрана")
+    out("PASS" if has("SUPER+GRAVE", "m2res-drop") else "WARN", "SUPER+` → выпадающий терминал")
+    out("PASS" if has("SUPER+TAB", "m2res-overview") else "WARN", "SUPER+Tab → обзор рабочих столов")
+    out("PASS" if has("SUPER+CTRL+N", "m2res-night") else "WARN", "SUPER+Ctrl+N → ночной свет (m2res-night)")
+    out("PASS" if "GAME" in open(f"{M2}/player/control.py").read() else "WARN", "Центр управления: плитка GAME")
+    _c = open(f"{M2}/player/control.py").read()
+    out("PASS" if all(k in _c for k in ("BLUETOOTH", "WI-FI", "VPN", "SOUND")) else "WARN", "Центр управления: плитки BT / Wi-Fi / VPN / SOUND")
+    out("PASS" if has("PRINT", "shot") else "WARN", "Print → m2res-shot")
+    out("PASS" if "SUPER+SPACE" not in binds else "FAIL", "SUPER+SPACE свободен (раскладка)", "это переключатель языка, бинд на него не вешаем")
+    dup = [k for k, v in binds.items() if len(v) > 1 and len({f for f, _ in v}) > 1]
+    out("PASS" if not dup else "WARN", "нет дублей биндов между файлами", ", ".join(dup[:6]))
+    kb = open(f"{HY}/lua/core.lua").read() if os.path.exists(f"{HY}/lua/core.lua") else ""
+    out("PASS" if "grp:win_space_toggle" in kb else "WARN", "kb_options: grp:win_space_toggle")
+
+    sec("Экран блокировки")
+    try:
+        lc = open(f"{HY}/hyprlock.conf").read()
+        out("PASS" if "m2res/lock/hyprlock.conf" in lc else "WARN", "hyprlock.conf подключает m2res-экран", "cp hyprlock.conf.hud-wip hyprlock.conf")
+    except Exception as e: out("FAIL", "hyprlock.conf не читается", str(e))
+    for f in ("lock/hyprlock.conf", "lock/colors.conf", "scripts/m2res-lockfx"):
+        out("PASS" if os.path.exists(f"{M2}/{f}") else "FAIL", f"файл {f}")
+    ft = sh("faillock", "--user", os.environ.get("USER", "")).splitlines()[2:]
+    valid = [l for l in ft if l.rstrip().endswith("V")]
+    out("PASS" if len(valid) < 2 else "WARN", f"faillock: активных неудач {len(valid)}", "faillock --user $USER --reset")
+    if "$FAIL" in open(f"{M2}/lock/hyprlock.conf").read(): out("PASS", "экран блокировки показывает причину отказа ($FAIL)")
+    else: out("WARN", "на экране блокировки нет $FAIL — причину отказа не видно")
+
+    sec("Файлы и зависимости")
+    bad = []
+    for f in glob.glob(f"{M2}/scripts/*"):
+        if f.endswith((".bak", ".pyc")) or ".bak-" in f or os.path.isdir(f): continue
+        if not os.access(f, os.X_OK): bad.append(os.path.basename(f))
+    out("PASS" if not bad else "FAIL", "скрипты исполняемые", ", ".join(bad))
+    broken = []
+    for f in sorted(glob.glob(f"{M2}/player/*.py") + [x for x in glob.glob(f"{M2}/scripts/*") if ".bak" not in x and not os.path.isdir(x)]):
+        try:
+            if f.endswith(".py") or open(f).readline().startswith("#!/usr/bin/env python"):
+                py_compile.compile(f, cfile=os.path.join(tempfile.gettempdir(), "m2res-doctor.pyc"), doraise=True)
+        except Exception as e: broken.append(os.path.basename(f))
+    out("PASS" if not broken else "FAIL", "Python-файлы компилируются", ", ".join(broken))
+    out("PASS" if os.path.exists("/usr/lib/libgtk4-layer-shell.so") else "FAIL", "libgtk4-layer-shell")
+    r = subprocess.run([sys.executable, "-c", f"import sys;sys.path.insert(0,'{M2}/player/vendor');import cairo"], capture_output=True)
+    out("PASS" if r.returncode == 0 else "FAIL", "vendored pycairo")
+    for t in ("grim", "jq", "wl-copy", "playerctl", "wpctl", "nvidia-smi", "hyprctl", "gio"):
+        out("PASS" if shutil.which(t) else "WARN", f"утилита {t}")
+    out("PASS" if sh("fc-list", ":family=CaskaydiaMono Nerd Font").strip() else "WARN", "шрифт CaskaydiaMono Nerd Font")
+
+    sec("Данные")
+    try:
+        json.load(open(f"{M2}/wallpick-state.json")); out("PASS", "wallpick-state.json валиден")
+    except Exception: out("WARN", "wallpick-state.json не читается")
+    out("PASS" if os.path.exists(f"{M2}/wallpapers/current.png") else "WARN", "wallpapers/current.png (фон экрана блокировки)")
+    act = sh("hyprctl", "hyprpaper", "listactive").strip()
+    out("PASS" if act and "no wallpapers" not in act.lower() else "WARN", "hyprpaper: обои применены", act[:80])
+    nb = glob.glob(f"{M2}/**/*.bak*", recursive=True) + glob.glob(f"{HY}/*.bak*") + glob.glob(f"{HY}/*before-m2res*")
+    sz = sum(os.path.getsize(f) for f in nb if os.path.isfile(f)) / 1048576
+    out("PASS" if sz < 50 else "WARN", f"бэкапов: {len(nb)} шт, {sz:.1f} МБ", "m2res-doctor snapshot, затем можно чистить *.bak-*")
+
+    sec("Снимки")
+    try:
+        ts = int(subprocess.run(["git", "-C", SNAP, "log", "-1", "--format=%ct"], capture_output=True, text=True).stdout.strip())
+        d = (time.time() - ts) / 86400
+        out("PASS" if d < 7 else "WARN", f"последний снимок {d:.1f} дн назад", "m2res-doctor snapshot")
+    except Exception: out("WARN", "снимков ещё нет", "m2res-doctor snapshot")
+
+
+# ---------------- снимки ----------------
+SRC = [  # (откуда, куда внутри снимка, glob-исключения)
+    (M2, "m2res", ("wallpapers", "sounds", "__pycache__", "vendor", "*.bak*", "*.pyc", "wallpick", "scene.png", ".git")),
+    (f"{HY}/lua", "hypr/lua", ("__pycache__", "*.bak*", "*.before-*")),
+]
+FILES = [(f"{HY}/{n}", f"hypr/{n}") for n in ("hyprland.lua", "hypridle.conf", "hyprlock.conf", "hyprpaper.conf", "gaming.lua")] + \
+        [(f"{H}/.config/waybar/{n}", f"waybar/{n}") for n in ("config", "modules.json", "style.css")] + [(f"{H}/.config/mako/config", "mako/config")]
+
+
+def git(*a, check=False):
+    return subprocess.run(["git", "-C", SNAP, *a], capture_output=True, text=True, check=check)
+
+
+def sync():
+    os.makedirs(SNAP, exist_ok=True)
+    if not os.path.isdir(f"{SNAP}/.git"):
+        git("init", "-q", "-b", "main"); open(f"{SNAP}/README.md", "w").write("# m2res snapshots\nСоздано m2res-doctor. Восстановить файл: m2res-doctor restore REF путь\n")
+    for d in ("m2res", "hypr", "waybar", "mako"): shutil.rmtree(f"{SNAP}/{d}", ignore_errors=True)
+    for src, dst, ign in SRC:
+        if os.path.isdir(src): shutil.copytree(src, f"{SNAP}/{dst}", ignore=shutil.ignore_patterns(*ign), symlinks=True)
+    for src, dst in FILES:
+        if os.path.exists(src):
+            os.makedirs(os.path.dirname(f"{SNAP}/{dst}"), exist_ok=True); shutil.copy2(src, f"{SNAP}/{dst}")
+    git("add", "-A")
+
+
+def snapshot(msg=""):
+    sync()
+    if not git("status", "--porcelain").stdout.strip(): print("без изменений — снимок не нужен"); return 0
+    stat = git("diff", "--cached", "--shortstat").stdout.strip()
+    r = git("commit", "-q", "-m", msg or f"snapshot {datetime.now():%Y-%m-%d %H:%M}\n\n{stat}")
+    print("снимок сохранён:", git("log", "-1", "--format=%h %s").stdout.splitlines()[0], "|", stat); return r.returncode
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "check"
+    if cmd == "snapshot": sys.exit(snapshot(" ".join(sys.argv[2:])))
+    elif cmd == "log": print(git("log", "-15", "--format=%h  %ad  %s", "--date=format:%d.%m %H:%M").stdout or "снимков нет")
+    elif cmd == "diff":
+        if not os.path.isdir(f"{SNAP}/.git") or not git("rev-parse", "HEAD").stdout.strip(): print("снимков ещё нет"); sys.exit(0)
+        sync(); print(git("diff", "--cached", "--stat", "HEAD").stdout or "изменений с последнего снимка нет")
+    elif cmd == "restore" and len(sys.argv) == 4: sys.stdout.write(git("show", f"{sys.argv[2]}:{sys.argv[3]}").stdout)
+    elif cmd in ("check", "-h", "--help") and cmd != "check": print(__doc__)
+    else:
+        print(col("1", "m2res-doctor"), datetime.now().strftime("%d.%m.%Y %H:%M")); check()
+        print(f"\nитого: {col('32', str(res['PASS']) + ' PASS')}, {col('33', str(res['WARN']) + ' WARN')}, {col('31', str(res['FAIL']) + ' FAIL')}")
+        sys.exit(1 if res["FAIL"] else 0)

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# m2res-drop [toggle] — выпадающий терминал (SUPER+`): ghostty с классом m2.drop живёт на special-столе "drop".
+# Первый вызов запускает его и показывает, дальше окно просто прячется/показывается (состояние шелла сохраняется).
+has(){ hyprctl -j clients | jq -e '.[]|select(.class=="m2.drop")' >/dev/null; }
+shown(){ hyprctl -j monitors | jq -e '.[]|select(.specialWorkspace.name=="special:drop")' >/dev/null; }
+tog(){ hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("drop"))' >/dev/null; }
+if ! has; then
+  setsid -f ghostty --class=m2.drop --title=dropdown >/dev/null 2>&1
+  for _ in $(seq 1 40); do has && break; sleep 0.1; done
+  sleep 0.3; shown || tog
+  exit 0
+fi
+tog

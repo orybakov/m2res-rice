@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# m2res-notify on|off|test|dnd — переключает mako на стиль m2res и обратно
+CFG="$HOME/.config/m2res/mako/config"
+mine(){ pgrep -f "^mako -c $CFG" >/dev/null; }
+case "${1:-on}" in
+  on)
+    mine && { makoctl reload; exit 0; }
+    systemctl --user stop mako 2>/dev/null; pkill -x mako 2>/dev/null; sleep 0.3
+    setsid -f mako -c "$CFG" >/tmp/m2res-mako.log 2>&1 ;;
+  off)
+    pkill -f "^mako -c $CFG"; sleep 0.3; systemctl --user start mako ;;
+  dnd) makoctl mode -t do-not-disturb ;;
+  test)
+    notify-send -a "Build" "Сборка завершена" "m2res · 12 файлов · 0 ошибок"
+    notify-send -u low -a "Syncthing" "Синхронизация" "3 файла обновлено"
+    notify-send -u critical -a "Disk" "Мало места на /" "Свободно 2.1 ГБ из 120" ;;
+  *) echo "usage: $0 on|off|dnd|test" >&2; exit 2 ;;
+esac
