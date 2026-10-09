@@ -60,6 +60,38 @@ else
   if [ ! -r "$H" ]; then
     mkdir -p "$(dirname "$H")"; printf -- '-- создан установщиком m2res: базовые бинды (можно заменить своими)\npcall(dofile, os.getenv("HOME") .. "/.config/m2res/hypr-base.lua")\n' > "$H"; echo "создан $H"
   fi
+  # экран блокировки m2res: любой запуск hyprlock (SUPER+L, hypridle) берёт наш конфиг; прежний сохраняется
+  HL="$(dirname "$H")/hyprlock.conf"
+  if ! grep -qs "m2res/lock/hyprlock.conf" "$HL"; then
+    [ -e "$HL" ] && cp "$HL" "$HL.bak-before-m2res" && echo "прежний hyprlock.conf сохранён: $HL.bak-before-m2res"
+    printf -- '# m2res: ретро-ТВ экран блокировки. Прежний конфиг: hyprlock.conf.bak-before-m2res (если был)\nsource = ~/.config/m2res/lock/hyprlock.conf\n' > "$HL"; echo "hyprlock.conf → экран m2res"
+  fi
+  # обои и автоблокировка: создаём только если у вас этих конфигов нет
+  HP="$(dirname "$H")/hyprpaper.conf"
+  [ -e "$HP" ] || { printf 'preload = ~/.config/m2res/wallpapers/current.png\nwallpaper = , ~/.config/m2res/wallpapers/current.png\nipc = true\nsplash = false\n' > "$HP"; echo "создан hyprpaper.conf"; }
+  HI="$(dirname "$H")/hypridle.conf"
+  [ -e "$HI" ] || { cat > "$HI" <<IDLE
+general {
+    lock_cmd = pidof hyprlock || hyprlock
+    before_sleep_cmd = loginctl lock-session
+    after_sleep_cmd = hyprctl dispatch dpms on
+}
+listener {
+    timeout = 555
+    on-timeout = $M2/scripts/m2res-idledim start 45
+    on-resume = $M2/scripts/m2res-idledim stop
+}
+listener {
+    timeout = 600
+    on-timeout = loginctl lock-session; sleep 1.5; $M2/scripts/m2res-idledim stop
+}
+listener {
+    timeout = 660
+    on-timeout = hyprctl dispatch dpms off
+    on-resume = hyprctl dispatch dpms on
+}
+IDLE
+    echo "создан hypridle.conf (затемнение за 45 с, блокировка через 10 мин)"; }
   "$M2/scripts/m2res-enable"; [ -z "${M2_INSTALL_NORELOAD:-}" ] && command -v hyprctl >/dev/null && hyprctl reload >/dev/null 2>&1; fi
 if [ -z "${M2_INSTALL_NORELOAD:-}" ] && hyprctl monitors >/dev/null 2>&1; then say "проверка"; "$M2/scripts/m2res-doctor" 2>&1 | grep -E "WARN|FAIL|итого"; fi
 echo

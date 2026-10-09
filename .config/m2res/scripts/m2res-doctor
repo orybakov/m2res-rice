@@ -55,7 +55,7 @@ def check():
     ce = sh("hyprctl", "configerrors").strip()
     out("PASS" if not ce else "FAIL", "конфиг без ошибок", ce[:160])
     texts = {}
-    for f in glob.glob(f"{HY}/lua/*.lua") + [f"{M2}/hypr-m2res.lua", f"{HY}/hyprland.lua"]:
+    for f in glob.glob(f"{HY}/lua/*.lua") + [f"{M2}/hypr-m2res.lua", f"{HY}/hyprland.lua"] + glob.glob(f"{M2}/hypr-base.lua"):
         try: texts[f] = open(f).read()
         except Exception: pass
     binds = {}

@@ -3,7 +3,7 @@
 list — таблица «клавиши → действие»; json — для шпаргалки (SUPER+F1); dups — дубликаты (код 1, если есть)."""
 import sys, os, re, glob, json
 
-FILES = sorted(glob.glob(os.path.expanduser("~/.config/hypr/lua/*.lua"))) + [os.path.expanduser("~/.config/m2res/hypr-m2res.lua")]
+FILES = sorted(glob.glob(os.path.expanduser("~/.config/hypr/lua/*.lua"))) + [os.path.expanduser("~/.config/m2res/hypr-m2res.lua")] + glob.glob(os.path.expanduser("~/.config/m2res/hypr-base.lua"))
 NAMES = {  # человеческие названия для известных команд
     "m2res-center": "Центр уведомлений", "m2res-control": "Центр управления", "m2res-wallpick": "Выбор обоев", "m2res-player": "Плеер",
     "m2res-launcher": "Лаунчер приложений", "m2res-launch": "Лаунчер приложений", "m2res-power": "Меню выключения", "m2res-clip": "История буфера обмена",

@@ -13,9 +13,10 @@ hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "t
 hl.bind("SUPER + M", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
 hl.bind("SUPER + T", hl.dsp.window.float({ action = "toggle" }))
 hl.bind("SUPER + J", hl.dsp.layout("togglesplit"))
-for _, d in ipairs({ "left", "right", "up", "down" }) do
-    hl.bind("SUPER + " .. d, hl.dsp.focus({ direction = d }))
-end
+hl.bind("SUPER + left", hl.dsp.focus({ direction = "left" }))
+hl.bind("SUPER + right", hl.dsp.focus({ direction = "right" }))
+hl.bind("SUPER + up", hl.dsp.focus({ direction = "up" }))
+hl.bind("SUPER + down", hl.dsp.focus({ direction = "down" }))
 
 -- ── бинды самого райса (на основной машине они лежат в hypr/lua/binds.lua) ──
 local m2 = os.getenv("HOME") .. "/.config/m2res/scripts/"
@@ -44,3 +45,10 @@ hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tru
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
 hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+
+-- ── раскладка us/ru (переключение Win+Space) и автозапуск того, что нужно райсу ──
+hl.config({ input = { kb_layout = "us,ru", kb_options = "grp:win_space_toggle", follow_mouse = 1 } })
+hl.on("hyprland.start", function()
+    hl.exec_cmd("hyprpaper")   -- обои (hyprpaper.conf создаёт установщик)
+    hl.exec_cmd("hypridle")    -- автоблокировка (hypridle.conf создаёт установщик)
+end)
