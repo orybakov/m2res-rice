@@ -23,7 +23,7 @@
 
 ## Райсы — переключатель оформления
 
-Один райс меняет всё: палитру, обои, Waybar, геометрию и анимации Hyprland, форму и стиль виджетов, уведомления, экран блокировки, Ghostty, док и звуки. 7 авторских райсов (m2res, paper, zen, brutal, cyber, glass, tty) и 6 из тем `~/.local/share/dotfiles/themes`.
+Один райс меняет всё: палитру, обои, Waybar, геометрию и анимации Hyprland, форму и стиль виджетов, уведомления, экран блокировки, Ghostty, док и звуки. 7 авторских райсов (m2res, paper, zen, brutal, cyber, glass, tty) и 6 с палитрами популярных тем: Catppuccin, Everforest, Matte Black, Nord, Osaka Jade, Ristretto.
 
 ![Райсы: m2res, paper, zen, brutal, cyber, glass, tty, nord, osaka-jade](docs/rices.jpg)
 
