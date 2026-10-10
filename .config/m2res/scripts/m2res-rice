@@ -195,6 +195,7 @@ def layer_macdock(r):
                          stdout=open("/tmp/m2res-macdock.log", "w"), stderr=subprocess.STDOUT)
     else:
         sh("pkill", "-f", f"^python3 {M2}/player/macdock.py")
+        sh(f"{S}/m2res-dock", "start", t=5)      # боковой dock, который мы гасили для macOS-райса, возвращаем
 
 
 def layer_hypr(r, force=False):
