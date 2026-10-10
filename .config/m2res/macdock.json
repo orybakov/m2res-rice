@@ -38,5 +38,8 @@
    "cmd": "uwsm app -- telegram-desktop",
    "cls": "org.telegram.desktop"
   }
- ]
+ ],
+ "autohide": true,
+ "edge": 4,
+ "hide_ms": 450
 }

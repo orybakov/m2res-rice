@@ -46,10 +46,16 @@ def gicon(desktop_id):
     return info.get_icon() if info else None
 
 
+OFF = 120          # на сколько px панель уходит вниз, когда скрыта (высота капсулы + запас)
+ANIM_MS = 16       # шаг анимации выезда
+
+
 class Dock(Gtk.Application):
     def __init__(self):
         super().__init__(application_id="m2res.macdock")
         self.dots = []
+        self.p = 0.0; self.target = 0.0; self.in_dock = False; self.in_edge = False
+        self.hide_id = None; self.anim_id = None; self.bottom = 10; self.win = None; self.edge = None
 
     def do_activate(self):
         c = load_cfg()
@@ -58,7 +64,8 @@ class Dock(Gtk.Application):
         LS.init_for_window(win)
         LS.set_layer(win, LS.Layer.TOP)
         LS.set_anchor(win, LS.Edge.BOTTOM, True)
-        LS.set_margin(win, LS.Edge.BOTTOM, int(c.get("bottom", 10)))
+        self.bottom = int(c.get("bottom", 10)); self.cfg = c
+        LS.set_margin(win, LS.Edge.BOTTOM, self.bottom)
         LS.set_exclusive_zone(win, 0)
         LS.set_keyboard_mode(win, LS.KeyboardMode.NONE)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6); box.add_css_class("macdock")
@@ -84,9 +91,74 @@ class Dock(Gtk.Application):
         win.set_child(box)
         prov = Gtk.CssProvider(); prov.load_from_string(CSS)
         Gtk.StyleContext.add_provider_for_display(win.get_display(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        win.present()
+        self.win = win
+        mo = Gtk.EventControllerMotion()
+        mo.connect("enter", lambda *_: self.hover_dock(True)); mo.connect("leave", lambda *_: self.hover_dock(False))
+        box.add_controller(mo)
+        if c.get("autohide", True):
+            self.setup_edge(c)
+            LS.set_margin(win, LS.Edge.BOTTOM, self.bottom - OFF)
+            win.present(); win.set_visible(False)
+        else:
+            win.present(); self.p = self.target = 1.0
         self.refresh()
         GLib.timeout_add(1500, self.refresh)
+
+    def setup_edge(self, c):
+        """Невидимая полоска у нижнего края: наведение на неё выдвигает док."""
+        edge = int(c.get("edge", 4))
+        ew = Gtk.Window(application=self); ew.set_decorated(False); ew.set_focusable(False)
+        ew.set_default_size(1, edge)
+        LS.init_for_window(ew); LS.set_layer(ew, LS.Layer.TOP)
+        for e in (LS.Edge.BOTTOM, LS.Edge.LEFT, LS.Edge.RIGHT): LS.set_anchor(ew, e, True)
+        LS.set_exclusive_zone(ew, 0); LS.set_keyboard_mode(ew, LS.KeyboardMode.NONE)
+        da = Gtk.DrawingArea(); da.set_content_height(edge)
+        ew.set_child(da)
+        em = Gtk.EventControllerMotion()
+        em.connect("enter", lambda *_: self.hover_edge(True)); em.connect("leave", lambda *_: self.hover_edge(False))
+        da.add_controller(em)
+        ew.present()
+        self.edge = ew
+
+    def hover_edge(self, on):
+        self.in_edge = on
+        if on: self.show()
+        else: self.schedule_hide()
+
+    def hover_dock(self, on):
+        self.in_dock = on
+        if on:
+            if self.hide_id: GLib.source_remove(self.hide_id); self.hide_id = None
+        else: self.schedule_hide()
+
+    def schedule_hide(self):
+        if self.in_edge or self.in_dock or self.hide_id: return
+        self.hide_id = GLib.timeout_add(int(self.cfg.get("hide_ms", 450)), self.do_hide)
+
+    def do_hide(self):
+        self.hide_id = None
+        if not (self.in_edge or self.in_dock): self.animate(0.0)
+        return False
+
+    def show(self):
+        if self.hide_id: GLib.source_remove(self.hide_id); self.hide_id = None
+        if not self.win.get_visible(): self.win.set_visible(True); self.win.present()
+        self.animate(1.0)
+
+    def animate(self, tgt):
+        self.target = tgt
+        if self.anim_id is None: self.anim_id = GLib.timeout_add(ANIM_MS, self.tick)
+
+    def tick(self):
+        step = 0.18
+        if self.p < self.target: self.p = min(self.target, self.p + step)
+        elif self.p > self.target: self.p = max(self.target, self.p - step)
+        LS.set_margin(self.win, LS.Edge.BOTTOM, int(round(self.bottom - OFF * (1 - self.p))))
+        if self.p == self.target:
+            self.anim_id = None
+            if self.target == 0.0: self.win.set_visible(False)
+            return False
+        return True
 
     def refresh(self):
         run = running()
