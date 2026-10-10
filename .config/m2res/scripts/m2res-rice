@@ -267,7 +267,8 @@ def layer_mako(r):
         s = re.sub(r"(?m)^format=.*$", lambda _m: f'format=<span color="{crit or acc}" size="small"><b>󰀦  %a</b></span>\\n<b>%s</b>\\n<span color="{crit_body or body}">%b</span>', s)
         return s
     t = sect(t, "[urgency=critical]", fc)
-    open(p, "w").write(t); sh("makoctl", "reload")
+    open(p, "w").write(t)
+    sh(f"{S}/m2res-notify", "on", t=10)     # поднимает mako именно на m2res/mako/config (makoctl reload трогал системный демон)
 
 
 def layer_lock(r):
