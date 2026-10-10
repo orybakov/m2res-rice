@@ -272,11 +272,12 @@ def layer_lock(r):
 
 
 def ghostty_base():
-    """Реальные значения Ghostty без райса: тема из dotfiles + базовые ключи конфига. Нужны, чтобы при смене на райс без своих цветов
+    """Реальные значения Ghostty без райса: тема из конфига Ghostty + базовые ключи конфига. Нужны, чтобы при смене на райс без своих цветов
     вернуть прежний вид явно (Ghostty при перезагрузке не всегда сбрасывает снятые ключи)."""
     out = {}
     try:
-        th = re.search(r"(?m)^theme\s*=\s*(.+)$", open(f"{H}/.local/share/dotfiles/current/theme/ghostty.conf").read())
+        gcf = open(f"{H}/.config/ghostty/config").read()
+        th = re.search(r"(?m)^theme\s*=\s*(.+)$", gcf) or re.search(r"(?m)^theme\s*=\s*(.+)$", open(f"{H}/.local/share/dotfiles/current/theme/ghostty.conf").read()) if os.path.exists(f"{H}/.local/share/dotfiles/current/theme/ghostty.conf") else re.search(r"(?m)^theme\s*=\s*(.+)$", gcf)
         name = th[1].strip().strip('"') if th else ""
         for d in (f"{H}/.config/ghostty/themes", "/usr/share/ghostty/themes"):
             f = f"{d}/{name}"
