@@ -3,7 +3,7 @@
  "order": 70,
  "title": "macOS",
  "icon": "",
- "desc": "светлое матовое стекло, полоса сверху во всю ширину, синий акцент, системные скругления",
+ "desc": "клон macOS: строка меню сверху, нижний док с иконками, светлое стекло, синий акцент, системные скругления",
  "palette": {
   "accent": "#0a84ff",
   "pill_bg": "rgba(255, 255, 255, 0.0)",
@@ -48,7 +48,7 @@
   "border_a": 0.5
  },
  "bar": {
-  "height": 28,
+  "height": 26,
   "margin": [
    0,
    0,
@@ -58,33 +58,52 @@
   "island": 0,
   "position": "top",
   "spacing": 0,
+  "css": "bar.css",
   "left": [
-   "memory",
-   "hyprland/language"
+   "custom/apple",
+   "hyprland/window"
   ],
-  "center": [
-   "hyprland/workspaces"
-  ],
+  "center": [],
   "right": [
+   "custom/rec",
+   "custom/notif",
+   "custom/control",
    "pulseaudio",
+   "clock"
+  ],
+  "hide": [
+   "memory",
    "custom/weather",
    "tray",
    "custom/profile",
-   "custom/rec",
-   "custom/notif",
    "custom/timer",
-   "clock",
    "custom/rice",
-   "custom/control"
+   "hyprland/language",
+   "hyprland/workspaces"
   ],
-  "css": "bar.css"
+  "modules": {
+   "custom/apple": {
+    "format": "",
+    "tooltip": false,
+    "on-click": "m2res-launcher"
+   },
+   "hyprland/window": {
+    "format": "<b>{}</b>",
+    "max-length": 44,
+    "separate-outputs": true
+   },
+   "clock": {
+    "format": "{0:%a %d %b  %H:%M}",
+    "tooltip": false
+   }
+  }
  },
  "border": "solid",
  "hypr": {
   "gaps_in": 6,
   "gaps_out": 12,
   "border_size": 2,
-  "rounding": 12,
+  "rounding": 10,
   "rounding_power": 2,
   "active_opacity": 0.97,
   "inactive_opacity": 0.92,
@@ -99,9 +118,9 @@
   },
   "shadow": {
    "enabled": true,
-   "range": 34,
+   "range": 30,
    "render_power": 3,
-   "color": "0x22000000"
+   "color": "0x33000000"
   },
   "animations_enabled": true,
   "anim": {
@@ -173,15 +192,15 @@
   }
  },
  "mako": {
-  "width": 400,
+  "width": "380",
   "anchor": "top-right",
   "outer-margin": "56,18,0,0",
-  "padding": "14,18,14,16",
-  "border-size": 1,
-  "border-radius": 24,
-  "background-color": "#f5f5f7f2",
+  "padding": "14",
+  "border-size": "1",
+  "border-radius": "14",
+  "background-color": "#f5f5f7f5",
   "text-color": "#1d1d1f",
-  "font": "CaskaydiaMono Nerd Font Propo Bold 11",
+  "font": "Noto Sans 11",
   "icon-border-radius": 14,
   "body": "#6e6e73",
   "low": "#6e6e73",
@@ -189,8 +208,10 @@
   "crit": "#ff3b30",
   "crit_bg": "#fff1f0f2",
   "crit_body": "#ffd0d8",
-  "border-color": "#0a84ff",
-  "low_text": "#6e6e73"
+  "border-color": "#d1d1d6",
+  "low_text": "#6e6e73",
+  "margin": "10",
+  "default-timeout": "5000"
  },
  "lock": {
   "font": "CaskaydiaMono Nerd Font Propo",
@@ -216,5 +237,47 @@
   "critical": "crit-glass",
   "low": "low-tick",
   "volume": 0.6
+ },
+ "macdock": {
+  "icon": 50,
+  "bottom": 10,
+  "apps": [
+   {
+    "name": "Finder",
+    "id": "org.gnome.Nautilus",
+    "cmd": "uwsm app -- nautilus --new-window",
+    "cls": "org.gnome.Nautilus"
+   },
+   {
+    "name": "Terminal",
+    "id": "com.mitchellh.ghostty",
+    "cmd": "uwsm app -- ghostty",
+    "cls": "com.mitchellh.ghostty"
+   },
+   {
+    "name": "Chrome",
+    "id": "google-chrome",
+    "cmd": "uwsm app -- google-chrome-stable",
+    "cls": "google-chrome"
+   },
+   {
+    "name": "Vivaldi",
+    "id": "vivaldi-stable",
+    "cmd": "uwsm app -- vivaldi-stable",
+    "cls": "vivaldi-stable"
+   },
+   {
+    "name": "VS Code",
+    "id": "code",
+    "cmd": "uwsm app -- code",
+    "cls": "code"
+   },
+   {
+    "name": "Telegram",
+    "id": "org.telegram.desktop",
+    "cmd": "uwsm app -- telegram-desktop",
+    "cls": "org.telegram.desktop"
+   }
+  ]
  }
 }

@@ -135,18 +135,18 @@ def layer_bar(r):
     if cfg.get("position") == "bottom" and "margin-top" in cfg and "margin-bottom" not in cfg:
         cfg["margin-bottom"] = cfg.pop("margin-top")
     if cfg.get("position") == "bottom": cfg.pop("margin-top", None)
-    have = set(cfg) | {m for k in cfg if k.startswith("modules-") for m in cfg[k]}
+    for k, v in bar.get("modules", {}).items():  # точечные правки и новые модули (формат, интервал, custom/…) — до сборки строк
+        cfg.setdefault(k, {}); cfg[k].update(v) if isinstance(cfg[k], dict) else cfg.__setitem__(k, v)
+    hide = set(bar.get("hide", []))              # модули, которых в этом райсе не показываем
     listed = set()
     for side in ("left", "center", "right"):
         if side in bar:
-            cfg[f"modules-{side}"] = [m for m in bar[side] if m in cfg]; listed |= set(bar[side])
+            cfg[f"modules-{side}"] = [m for m in bar[side] if m in cfg and m not in hide]; listed |= set(bar[side])
     # модули, которых райс не упомянул (напр. индикаторы локальных сервисов), остаются там, где были в базе
     base = json.load(open(f"{M2}/waybar/config.base"))
     for side in ("left", "center", "right"):
-        extra = [m for m in base.get(f"modules-{side}", []) if m not in listed and m not in cfg[f"modules-{side}"]]
+        extra = [m for m in base.get(f"modules-{side}", []) if m not in listed and m not in cfg[f"modules-{side}"] and m not in hide]
         if extra: cfg[f"modules-{side}"] = (extra + cfg[f"modules-{side}"]) if side == "right" else (cfg[f"modules-{side}"] + extra)
-    for k, v in bar.get("modules", {}).items():  # точечные правки модулей (формат, интервал…)
-        cfg.setdefault(k, {}); cfg[k].update(v) if isinstance(cfg[k], dict) else cfg.__setitem__(k, v)
     out = json.dumps(cfg, ensure_ascii=False, indent=4) + "\n"
     open(f"{M2}/waybar/config.tmp", "w").write(out); os.replace(f"{M2}/waybar/config.tmp", f"{M2}/waybar/config")
     # стиль
@@ -181,6 +181,20 @@ def lua_val(v):
 def game_on():
     try: return sh(f"{S}/m2res-game", "status").stdout.strip().startswith("on")
     except Exception: return False
+
+
+def layer_macdock(r):
+    """Нижний док (macdock.py): райс с ключом "macdock" включает его, остальные — выключают. Боковой dock при этом прячем."""
+    d = r.get("macdock")
+    if d:
+        json.dump(d, open(f"{M2}/macdock.json", "w"), ensure_ascii=False, indent=1)
+        sh("m2res-dock", "stop", t=5) if shutil.which("m2res-dock") else sh(f"{S}/m2res-dock", "stop", t=5)
+        sh("pkill", "-f", f"^python3 {M2}/player/macdock.py")
+        time.sleep(0.3)
+        subprocess.Popen(["setsid", "-f", "python3", f"{M2}/player/macdock.py"], env={**os.environ, "LD_PRELOAD": "/usr/lib/libgtk4-layer-shell.so"},
+                         stdout=open("/tmp/m2res-macdock.log", "w"), stderr=subprocess.STDOUT)
+    else:
+        sh("pkill", "-f", f"^python3 {M2}/player/macdock.py")
 
 
 def layer_hypr(r, force=False):
@@ -403,6 +417,7 @@ def apply(name, keep_accent=False, no_wall=False, quiet=False, remember=True):
     step("экран блокировки", layer_lock, r)
     step("Ghostty", layer_ghostty, r)
     step("док и звуки", lambda: (layer_dock(r), layer_sound(r)))
+    step("нижний док", layer_macdock, r)
     if not no_wall: step("обои", layer_wall, r)
     step("перезапуск виджетов", restart_widgets)
     sh("pkill", "-RTMIN+12", "-x", "waybar")
@@ -542,7 +557,7 @@ def cmd_validate(name=None):
         base = json.load(open(f"{M2}/waybar/config.base"))
         for side in ("left", "center", "right"):
             for m in bar.get(side, []):
-                if m not in base: errs.append(f"bar.{side}: нет модуля {m}")
+                if m not in base and m not in bar.get("modules", {}): errs.append(f"bar.{side}: нет модуля {m}")
         cf = bar.get("css")
         if cf and not find_file(r, cf): errs.append(f"нет {cf}")
         wl = r.get("wall")

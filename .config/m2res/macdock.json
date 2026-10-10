@@ -1,0 +1,42 @@
+{
+ "icon": 50,
+ "bottom": 10,
+ "apps": [
+  {
+   "name": "Finder",
+   "id": "org.gnome.Nautilus",
+   "cmd": "uwsm app -- nautilus --new-window",
+   "cls": "org.gnome.Nautilus"
+  },
+  {
+   "name": "Terminal",
+   "id": "com.mitchellh.ghostty",
+   "cmd": "uwsm app -- ghostty",
+   "cls": "com.mitchellh.ghostty"
+  },
+  {
+   "name": "Chrome",
+   "id": "google-chrome",
+   "cmd": "uwsm app -- google-chrome-stable",
+   "cls": "google-chrome"
+  },
+  {
+   "name": "Vivaldi",
+   "id": "vivaldi-stable",
+   "cmd": "uwsm app -- vivaldi-stable",
+   "cls": "vivaldi-stable"
+  },
+  {
+   "name": "VS Code",
+   "id": "code",
+   "cmd": "uwsm app -- code",
+   "cls": "code"
+  },
+  {
+   "name": "Telegram",
+   "id": "org.telegram.desktop",
+   "cmd": "uwsm app -- telegram-desktop",
+   "cls": "org.telegram.desktop"
+  }
+ ]
+}

@@ -10,7 +10,7 @@ height=180
 padding=14,18,14,16
 max-visible=5
 on-notify=exec $HOME/.config/m2res/scripts/m2res-notify-log
-default-timeout=6000
+default-timeout=5000
 group-by=app-name
 sort=-time
 

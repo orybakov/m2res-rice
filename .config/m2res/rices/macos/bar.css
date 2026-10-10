@@ -1,13 +1,12 @@
-/* Glass: стеклянные капсулы */
-window#waybar { background: transparent; }
-{PILLS} {
-    border-radius: 18px; padding: 4px 14px; margin: 3px 4px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+/* macOS: сплошная строка меню без капсул */
+window#waybar { background: rgba(246,246,248,0.78); border-bottom: 1px solid rgba(0,0,0,0.10); color: #1d1d1f; }
+#custom-apple, #window, #clock, #pulseaudio, #custom-notif, #custom-control, #custom-rec {
+    background: transparent; border: none; box-shadow: none; border-radius: 0; margin: 0; padding: 0 9px; color: #1d1d1f;
+    font-family: "Noto Sans"; font-size: 13px; font-weight: 500; min-height: 0;
 }
-#memory { border-left: 1px solid rgba(255,255,255,0.16); border-radius: 18px; }
-#workspaces button { border-radius: 18px; border: 1px solid rgba(255,255,255,0.16); background: @pill_bg; color: @pill_fg; font-family: "CaskaydiaMono Nerd Font Propo"; font-weight: 700; min-width: 28px; margin: 3px 4px; }
-#workspaces button label { font-family: "CaskaydiaMono Nerd Font Propo"; font-weight: 700; font-size: 13px; }
-#workspaces button.active { background: alpha(@accent, 0.88); color: #0a1220; min-width: 50px; }
-#workspaces button.active label { color: #0a1220; }
-tooltip { border-radius: 14px; border: 1px solid rgba(255,255,255,0.2); background: rgba(20, 28, 40, 0.9); }
+#custom-apple { font-family: "CaskaydiaMono Nerd Font"; font-size: 15px; padding: 0 12px; color: #1d1d1f; }
+#window { font-weight: 700; }
+#clock { font-weight: 600; }
+#custom-rec.recording, #custom-rec { color: #ff3b30; }
+#custom-notif, #custom-control { color: #0a84ff; }
+tooltip { border-radius: 10px; background: rgba(255,255,255,0.95); color: #1d1d1f; border: 1px solid rgba(0,0,0,0.12); }
