@@ -2,7 +2,7 @@
 """m2res layout OSD — пилюля «RU / EN» по центру внизу при смене раскладки (SUPER+SPACE).
 Фоновый процесс: слушает сокет событий Hyprland (activelayout), клавиатуру и мышь не трогает.
 Запуск: m2res-layout daemon"""
-import sys, os, socket, threading, time, math
+import sys, os, json, socket, threading, time, math
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from style import ST  # noqa: E402
@@ -13,7 +13,15 @@ gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango, PangoCairo, Gtk4LayerShell as LS  # noqa: E402
 
 FONT = ST.font
-ACC = (0.690, 0.835, 0.0)
+
+
+def accent():
+    """акцент из colors.json (его ставит m2res-accent / райс), как у остальных виджетов"""
+    try:
+        c = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "colors.json")))["accent"].lstrip("#")
+        return tuple(int(c[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except Exception:
+        return (0.690, 0.835, 0.0)
 W, H = 520, 190
 HOLD = 1.25
 NAMES = {"russian": ("RU", "РУССКАЯ"), "english (us)": ("EN", "ENGLISH · US"), "english": ("EN", "ENGLISH")}
@@ -51,7 +59,7 @@ class Osd(Gtk.ApplicationWindow):
         css = Gtk.CssProvider(); css.load_from_data(b"window { background: transparent; }")
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.a = Gtk.DrawingArea(); self.a.set_draw_func(self.draw); self.set_child(self.a)
-        self.code, self.cap = "EN", ""
+        self.code, self.cap = "EN", ""; self.acc = accent()
         self.t_show = -10.0; self.pulse = 0.0
         self.last_name, self.last_t = None, 0.0
         self.connect("map", lambda *_: self.get_surface() and self.get_surface().set_input_region(cairo.Region()))
@@ -88,36 +96,33 @@ class Osd(Gtk.ApplicationWindow):
     def draw(self, _a, cr, w, h):
         al, sc = self.phase()
         if al <= 0.001: return
-        t = time.monotonic() - self.t_show
+        A = self.acc; t = time.monotonic() - self.t_show
         pw, ph = 330 * sc, 120 * sc
         cx, cy = w / 2, h / 2 + (1 - al) * 14
-        x, y = cx - pw / 2, cy - ph / 2; r = ph / 2
-
-        def pill(pad=0):
-            cr.new_sub_path(); cr.arc(x + r, y + r, r + pad, math.pi / 2, math.pi * 1.5)
-            cr.arc(x + pw - r, y + r, r + pad, -math.pi / 2, math.pi / 2); cr.close_path()
-        for i, aa in ((14, 0.05), (9, 0.08), (5, 0.12)):          # свечение
-            cr.set_source_rgba(*ACC, aa * al); pill(i); cr.fill()
-        pill(); cr.set_source_rgba(*ST.bg[:3], 0.96 * al); cr.fill_preserve()
-        cr.set_source_rgba(*ACC, 0.9 * al); cr.set_line_width(3); cr.stroke()
+        x, y = cx - pw / 2, cy - ph / 2
+        # фон, рамка и форма — как у текущего райса (ST.frame): круг/квадрат/пилюля, стекло, неон, бруталь…
+        cr.push_group()
+        ST.frame(cr, x, y, pw, ph, A, int(ph / 2), glow=False)
+        cr.pop_group_to_source(); cr.paint_with_alpha(al)
         # бегущий блик по рамке в момент переключения
         if t < 0.55:
-            k = t / 0.55; cr.save(); pill(); cr.clip()
+            k = t / 0.55; cr.save()
+            ST.path(cr, x, y, pw, ph, int(ph / 2)); cr.clip()
             g = cairo.LinearGradient(x + (pw + 120) * k - 120, 0, x + (pw + 120) * k, 0)
-            g.add_color_stop_rgba(0, 1, 1, 1, 0); g.add_color_stop_rgba(0.5, 0.83, 1.0, 0.1, 0.45 * al); g.add_color_stop_rgba(1, 1, 1, 1, 0)
+            g.add_color_stop_rgba(0, 1, 1, 1, 0); g.add_color_stop_rgba(0.5, *A, 0.35 * al); g.add_color_stop_rgba(1, 1, 1, 1, 0)
             cr.set_source(g); cr.rectangle(x, y, pw, ph); cr.fill(); cr.restore()
-        # значок и код
-        lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} Bold {int(52 * sc)}"))
+        # код раскладки крупно слева, название и точки — справа
+        fg = ST.fg; dim = ST.dim
+        lay = PangoCairo.create_layout(cr); lay.set_font_description(Pango.FontDescription(f"{FONT} Bold {int(50 * sc)}"))
         lay.set_text(self.code, -1); tw, th = lay.get_pixel_size()
-        cr.set_source_rgba(0.93, 0.93, 0.90, al); cr.move_to(x + 36 * sc, cy - th / 2 - 5); PangoCairo.show_layout(cr, lay)
+        cr.set_source_rgba(*fg, al); cr.move_to(x + 40 * sc, cy - th / 2 - 4); PangoCairo.show_layout(cr, lay)
         cap = PangoCairo.create_layout(cr); cap.set_font_description(Pango.FontDescription(f"{FONT} {int(15 * sc)}"))
         cap.set_text(self.cap, -1); cw, chh = cap.get_pixel_size()
-        cr.set_source_rgba(*ACC, al); cr.move_to(x + pw - 30 * sc - cw, cy - chh / 2); PangoCairo.show_layout(cr, cap)
-        # индикатор: две точки под подписью
+        cr.set_source_rgba(*dim, al); cr.move_to(x + pw - 36 * sc - cw, cy - chh - 4 * sc); PangoCairo.show_layout(cr, cap)
         for i, c in enumerate(("RU", "EN")):
             on = c == self.code
-            cr.set_source_rgba(*(ACC if on else ST.n(0.45, 0.45, 0.41)), (1 if on else 0.6) * al)
-            cr.arc(x + pw - 30 * sc - cw + 5 + i * 14, cy + chh / 2 + 13 * sc, 4.0 * sc, 0, 6.3); cr.fill()
+            cr.set_source_rgba(*(A if on else dim), (1 if on else 0.45) * al)
+            cr.arc(x + pw - 36 * sc - cw + 4 + i * 14 * sc, cy + 14 * sc, 4.0 * sc, 0, 6.3); cr.fill()
 
 
 class App(Gtk.Application):
