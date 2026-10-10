@@ -165,7 +165,7 @@ def layer_bar(r):
     extra_css = extra_css.replace("{PILLS}", ", ".join(ids))
     css = f'@import url("colors.css");\n{defs}\n{base_css}\n/* ── райс: {r["_name"]} ── */\n{sub_acc(extra_css, acc)}\n'
     open(f"{M2}/waybar/style.tmp", "w").write(css); os.replace(f"{M2}/waybar/style.tmp", f"{M2}/waybar/style.css")
-    sh(f"{S}/m2res-bar", "reload", t=20)
+    sh(f"{S}/m2res-bar", "ensure", t=30)     # reload не поднимает панель, если процесс жив, но слоя нет
 
 
 def lua_val(v):
