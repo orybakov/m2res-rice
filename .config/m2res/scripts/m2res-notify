@@ -4,11 +4,11 @@ CFG="$HOME/.config/m2res/mako/config"
 mine(){ pgrep -f "^mako -c $CFG" >/dev/null; }
 case "${1:-on}" in
   on)
-    mine && { makoctl reload; exit 0; }
-    systemctl --user stop mako 2>/dev/null; pkill -x mako 2>/dev/null; sleep 0.3
-    setsid -f mako -c "$CFG" >/tmp/m2res-mako.log 2>&1 ;;
+    printf '[Service]\nExecStart=\nExecStart=/usr/bin/mako -c %s\n' "$CFG" > ~/.config/systemd/user/mako.service.d/m2res.conf
+    systemctl --user daemon-reload; systemctl --user restart mako.service ;;
   off)
-    pkill -f "^mako -c $CFG"; sleep 0.3; systemctl --user start mako ;;
+    rm -f ~/.config/systemd/user/mako.service.d/m2res.conf
+    systemctl --user daemon-reload; systemctl --user restart mako.service ;;
   dnd) makoctl mode -t do-not-disturb ;;
   test)
     notify-send -a "Build" "Сборка завершена" "m2res · 12 файлов · 0 ошибок"

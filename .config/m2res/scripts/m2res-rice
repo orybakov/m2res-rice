@@ -36,6 +36,12 @@ def sh(*a, t=15, inp=None):
     except Exception as e: return subprocess.CompletedProcess(a, 1, "", str(e))
 
 
+def scoped(*a):
+    """запуск демона в собственном scope systemd, а не в scope сессии инструмента (его чистят при завершении сессии)"""
+    try: subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--", *a], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except Exception: bg(*a)
+
+
 def bg(*a):
     try: subprocess.Popen(a, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except Exception: pass
@@ -191,8 +197,8 @@ def layer_macdock(r):
         sh("m2res-dock", "stop", t=5) if shutil.which("m2res-dock") else sh(f"{S}/m2res-dock", "stop", t=5)
         sh("pkill", "-f", f"^python3 {M2}/player/macdock.py")
         time.sleep(0.3)
-        subprocess.Popen(["setsid", "-f", "python3", f"{M2}/player/macdock.py"], env={**os.environ, "LD_PRELOAD": "/usr/lib/libgtk4-layer-shell.so"},
-                         stdout=open("/tmp/m2res-macdock.log", "w"), stderr=subprocess.STDOUT)
+        subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--", "python3", f"{M2}/player/macdock.py"], env={**os.environ, "LD_PRELOAD": "/usr/lib/libgtk4-layer-shell.so"},
+                         stdout=open("/tmp/m2res-macdock.log", "w"), stderr=subprocess.STDOUT, start_new_session=True)
     else:
         sh("pkill", "-f", f"^python3 {M2}/player/macdock.py")
         sh(f"{S}/m2res-dock", "start", t=5)      # боковой dock, который мы гасили для macOS-райса, возвращаем
@@ -392,8 +398,8 @@ def restart_widgets():
     for n in ("layoutosd", "volume", "switcher", "dock", "player"):
         sh("pkill", "-f", f"^python3 {M2}/player/{n}.py")
     time.sleep(0.3)
-    if docked: bg(f"{S}/m2res-dock", "start")
-    for d in ("m2res-volume", "m2res-layout", "m2res-switch"): bg(f"{S}/{d}", "daemon")
+    if docked: scoped(f"{S}/m2res-dock", "start")
+    for d in ("m2res-volume", "m2res-layout", "m2res-switch"): scoped(f"{S}/{d}", "daemon")
 
 
 # ───────────────────────── применение ─────────────────────────

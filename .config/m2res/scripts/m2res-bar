@@ -5,9 +5,17 @@
 #   ensure  — починить, если панели нет;  signal N — послать RTMIN+N только уже запущенной панели (не убьёт её при старте)
 M2="$HOME/.config/m2res"
 PAT="^waybar -c $M2/waybar/config"
-stop(){ pkill -f "$PAT" 2>/dev/null; for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$PAT" >/dev/null || return 0; sleep 0.2; done; pkill -9 -f "$PAT" 2>/dev/null; }
+stop(){ systemctl --user stop m2res-waybar.service 2>/dev/null; pkill -f "$PAT" 2>/dev/null; for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$PAT" >/dev/null || return 0; sleep 0.2; done; pkill -9 -f "$PAT" 2>/dev/null; }
 has_layer(){ hyprctl -j layers 2>/dev/null | jq -e '[.. | objects | select(.namespace? == "waybar")] | length > 0' >/dev/null 2>&1; }
-launch(){ setsid -f waybar -c "$M2/waybar/config" -s "$M2/waybar/style.css" >/dev/null 2>&1; }
+unit(){   # юнит создаём сами, если его нет (установщик копирует только ~/.config/m2res)
+  local u="$HOME/.config/systemd/user/m2res-waybar.service"
+  [ -f "$u" ] && return 0
+  mkdir -p "$(dirname "$u")"
+  printf '%s\n' "[Unit]" "Description=m2res Waybar" "PartOf=graphical-session.target" "After=graphical-session.target" "" "[Service]" \
+    "ExecStart=/usr/bin/waybar -c $M2/waybar/config -s $M2/waybar/style.css" "ExecReload=/bin/kill -USR2 \$MAINPID" "Restart=on-failure" "RestartSec=1" "" "[Install]" "WantedBy=graphical-session.target" > "$u"
+  systemctl --user daemon-reload 2>/dev/null
+}
+launch(){ unit; systemctl --user start m2res-waybar.service 2>/dev/null || setsid -f waybar -c "$M2/waybar/config" -s "$M2/waybar/style.css" >/dev/null 2>&1; }
 wait_layer(){ for _ in $(seq 1 30); do has_layer && return 0; sleep 0.2; done; return 1; }
 start(){
   if pgrep -f "$PAT" >/dev/null; then has_layer && return 0; wait_layer && return 0; stop; fi
