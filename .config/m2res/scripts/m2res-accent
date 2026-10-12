@@ -29,19 +29,24 @@ print("#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255)))
 PY
 }
 apply(){
-  local new="${1,,}" old; old=$(cur); old="${old,,}"
+  # MODE=auto (смена обоев): панель НЕ трогаем — ни её colors.css, ни перезагрузку Waybar (иначе она пересоздаёт слой и мигает)
+  local mode="${2:-set}" bar=1 new old wbk="$M2/waybar/colors.css.keep"
+  [ "$mode" = auto ] && bar=0
+  new="${1,,}"; old=$(cur); old="${old,,}"
   [[ "$new" =~ ^#[0-9a-f]{6}$ ]] || { echo "нужен #rrggbb" >&2; exit 2; }
   [ "$new" = "$old" ] && { echo "акцент не изменился: $new"; return; }
+  [ $bar = 0 ] && cp -f "$M2/waybar/colors.css" "$wbk" 2>/dev/null
   matugen color hex "$new" -c "$M2/matugen/config.toml" -t scheme-vibrant -m dark -q
+  [ $bar = 0 ] && [ -f "$wbk" ] && { cp -f "$wbk" "$M2/waybar/colors.css"; rm -f "$wbk"; }
   # matugen подбирает свой primary — приводим к точному цвету обоев
   local got; got=$(jq -r .accent "$CJ"); got="${got,,}"
   if [ "$got" != "$new" ]; then
-    sed -i "s/${got#\#}/${new#\#}/Ig" "$CJ" "$M2/waybar/colors.css" "$M2/lock/colors.conf"
+    if [ $bar = 1 ]; then sed -i "s/${got#\#}/${new#\#}/Ig" "$CJ" "$M2/waybar/colors.css" "$M2/lock/colors.conf"; else sed -i "s/${got#\#}/${new#\#}/Ig" "$CJ" "$M2/lock/colors.conf"; fi
   fi
   local o="${old#\#}" n="${new#\#}"
   for f in "$M2/mako/config" "$M2/lock/hyprlock.conf"; do sed -i "s/$o/$n/Ig" "$f"; done
   makoctl reload 2>/dev/null || true
-  "$M2/scripts/m2res-bar" reload >/dev/null 2>&1 || true
+  [ $bar = 1 ] && "$M2/scripts/m2res-bar" reload >/dev/null 2>&1 || true
   pkill -f "^python3 $M2/scripts/m2res-lockfx" 2>/dev/null || true
   "$M2/scripts/m2res-paint" apply >/dev/null 2>&1 || true     # рамки окон и Ghostty
   echo "акцент: $old → $new"
@@ -49,6 +54,6 @@ apply(){
 case "${1:-show}" in
   show) cur;;
   set) apply "${2:?usage: m2res-accent set #rrggbb}";;
-  auto) apply "$(from_wall)";;
+  auto) apply "$(from_wall)" auto;;
   *) echo "usage: $0 auto|set <#hex>|show" >&2; exit 2;;
 esac

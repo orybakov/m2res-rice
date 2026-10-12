@@ -130,3 +130,8 @@ end
 -- ── переключатель райсов: SUPER+ALT+R — карточки с живым предпросмотром, SUPER+ALT+SHIFT+R — следующий райс ──
 hl.bind("SUPER + ALT + R", hl.dsp.exec_cmd(m2 .. "/m2res-rice pick"))
 hl.bind("SUPER + ALT + SHIFT + R", hl.dsp.exec_cmd(m2 .. "/m2res-rice next"))
+
+-- смена обоев и перекраска панели: hyprpaper и waybar пересоздают свой слой (closelayer/openlayer),
+-- а анимация layersIn/layersOut превращала это в мигание — отключаем её для их слоёв
+hl.layer_rule({ name = "m2res-wallpaper-hyprpaper-noanim", match = { namespace = [[^(hyprpaper)$]] }, no_anim = true })
+hl.layer_rule({ name = "m2res-waybar-noanim", match = { namespace = [[^(waybar)$]] }, no_anim = true })
